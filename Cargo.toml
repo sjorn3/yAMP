@@ -1,0 +1,17 @@
+[package]
+name = "music-cache"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+test = []
+
+[dependencies]
+fake = { version = "2.9.2", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3.10.1"
+id3 = "1.13.1"
+fake = { version = "2.9.2", features = ["derive"] }
