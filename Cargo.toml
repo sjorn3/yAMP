@@ -6,12 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-test = []
+song-tags-gen = ["fake"]
+
+[profile.release]
+lto = true
 
 [dependencies]
-fake = { version = "2.9.2", features = ["derive"] }
+audiotags = "0.5.0"
+fake = { version = "2.9.2", features = ["derive"], optional = true }
+
+[[test]]
+name = "integration_test" # replace with the name of your integration test
+path = "tests/test.rs" # replace with the path to your integration test
+required-features = ["song-tags-gen"]
 
 [dev-dependencies]
 tempfile = "3.10.1"
 id3 = "1.13.1"
+audiotags = "0.5.0"
 fake = { version = "2.9.2", features = ["derive"] }
