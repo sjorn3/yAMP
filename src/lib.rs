@@ -3,6 +3,11 @@
 use audiotags::Tag;
 use std::path::Path;
 
+pub struct Song {
+    pub filepath: String,
+    pub song_tags: SongTags,
+}
+
 // There are many tags on a music file, but we only care about:
 //   - Track Title
 //   - Album Artist
@@ -23,15 +28,18 @@ pub struct SongTags {
     pub track_number: Option<u16>,
 }
 
-impl SongTags {
-    pub fn from_path(path: &Path) -> std::result::Result<SongTags, Box<dyn std::error::Error>> {
+impl Song {
+    pub fn from_path(path: &Path) -> std::result::Result<Self, Box<dyn std::error::Error>> {
         let tag = Tag::new().read_from_path(path)?;
         Ok(Self {
-            title: tag.title().map(ToString::to_string),
-            album_artist: tag.album_artist().map(ToString::to_string),
-            album: tag.album_title().map(ToString::to_string),
-            year: tag.year().and_then(|y| y.try_into().ok()),
-            track_number: tag.track_number(),
+            filepath: path.to_string_lossy().to_string(),
+            song_tags: SongTags {
+                title: tag.title().map(ToString::to_string),
+                album_artist: tag.album_artist().map(ToString::to_string),
+                album: tag.album_title().map(ToString::to_string),
+                year: tag.year().and_then(|y| y.try_into().ok()),
+                track_number: tag.track_number(),
+            },
         })
     }
 }

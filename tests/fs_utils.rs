@@ -5,7 +5,7 @@ use std::{fs::File, path::Path};
 use fake::{Dummy, Fake, Faker};
 use id3::{Tag as ID3Tag, TagLike, Version};
 use music_cache::tests::common::*;
-use music_cache::SongTags;
+use music_cache::{Song, SongTags};
 use tempfile::tempdir;
 
 #[test]
@@ -23,7 +23,7 @@ fn test_round_trip_dummy_mp3() -> Result {
 }
 
 #[derive(Debug)]
-pub struct SkeletonFileTree {
+struct SkeletonFileTree {
     dirs: Vec<SkeletonFileTree>,
     files: u8,
 }
@@ -98,7 +98,9 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
     Ok(())
 }
 
-fn check_tags_from_path(path: &Path, song: &SongTags) -> Result {
-    assert_eq!(&SongTags::from_path(path)?, song);
+fn check_tags_from_path(path: &Path, song_tags: &SongTags) -> Result {
+    let song = &Song::from_path(path)?;
+    assert_eq!(song.filepath, path.to_string_lossy().to_string());
+    assert_eq!(&song.song_tags, song_tags);
     Ok(())
 }
