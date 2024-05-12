@@ -13,6 +13,7 @@ lto = true
 
 [dependencies]
 audiotags = "0.5.0"
+sled = "0.34.7"
 fake = { version = "2.9.2", features = ["derive"], optional = true }
 
 [dev-dependencies]
