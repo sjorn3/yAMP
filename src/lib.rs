@@ -4,6 +4,9 @@ use audiotags::Tag;
 use std::path::{Path, PathBuf};
 
 pub struct Song {
+    // I don't think this will be resiliant to moving the library dir.
+    // The real solution here is to have the user specify library location
+    // and then store the relative path.
     pub filepath: PathBuf,
     pub song_tags: SongTags,
 }
@@ -22,10 +25,18 @@ pub struct Song {
 )]
 pub struct SongTags {
     pub title: Option<String>,
-    pub album_artist: Option<String>,
-    pub album: Option<String>,
-    pub year: Option<u16>,
     pub track_number: Option<u16>,
+    pub album: Album,
+}
+
+#[cfg_attr(
+    feature = "integration-tests",
+    derive(Debug, fake::Dummy, PartialEq, Eq)
+)]
+pub struct Album {
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub year: Option<u16>,
 }
 
 impl Song {
@@ -35,10 +46,12 @@ impl Song {
             filepath: path.to_path_buf(),
             song_tags: SongTags {
                 title: tag.title().map(ToString::to_string),
-                album_artist: tag.album_artist().map(ToString::to_string),
-                album: tag.album_title().map(ToString::to_string),
-                year: tag.year().and_then(|y| y.try_into().ok()),
                 track_number: tag.track_number(),
+                album: Album {
+                    artist: tag.album_artist().map(ToString::to_string),
+                    title: tag.album_title().map(ToString::to_string),
+                    year: tag.year().and_then(|y| y.try_into().ok()),
+                },
             },
         })
     }

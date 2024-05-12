@@ -74,7 +74,7 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
 
     let mut tag = ID3Tag::new();
 
-    if let Some(album) = &song.album {
+    if let Some(album) = &song.album.title {
         tag.set_album(album);
     }
 
@@ -82,11 +82,11 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
         tag.set_title(title);
     }
 
-    if let Some(album_artist) = &song.album_artist {
+    if let Some(album_artist) = &song.album.artist {
         tag.set_album_artist(album_artist);
     }
 
-    if let Some(year) = &song.year {
+    if let Some(year) = &song.album.year {
         tag.set_year(i32::from(*year));
     }
 
