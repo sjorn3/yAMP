@@ -23,7 +23,7 @@ fn test_round_trip_dummy_mp3() -> Result {
 }
 
 #[derive(Debug)]
-struct SkeletonFileTree {
+pub struct SkeletonFileTree {
     dirs: Vec<SkeletonFileTree>,
     files: u8,
 }
@@ -100,7 +100,7 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
 
 fn check_tags_from_path(path: &Path, song_tags: &SongTags) -> Result {
     let song = &Song::from_path(path)?;
-    assert_eq!(song.filepath, path.to_string_lossy().to_string());
+    assert_eq!(song.filepath, path.to_path_buf());
     assert_eq!(&song.song_tags, song_tags);
     Ok(())
 }

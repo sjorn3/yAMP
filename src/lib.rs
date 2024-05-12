@@ -1,10 +1,10 @@
 #![allow(clippy::missing_errors_doc)]
 
 use audiotags::Tag;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct Song {
-    pub filepath: String,
+    pub filepath: PathBuf,
     pub song_tags: SongTags,
 }
 
@@ -32,7 +32,7 @@ impl Song {
     pub fn from_path(path: &Path) -> std::result::Result<Self, Box<dyn std::error::Error>> {
         let tag = Tag::new().read_from_path(path)?;
         Ok(Self {
-            filepath: path.to_string_lossy().to_string(),
+            filepath: path.to_path_buf(),
             song_tags: SongTags {
                 title: tag.title().map(ToString::to_string),
                 album_artist: tag.album_artist().map(ToString::to_string),
