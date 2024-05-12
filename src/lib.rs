@@ -12,7 +12,7 @@ use std::path::Path;
 
 // Album Art can come later for now.
 #[cfg_attr(
-    any(feature = "song-tags-gen"),
+    feature = "integration-tests",
     derive(Debug, fake::Dummy, PartialEq, Eq)
 )]
 pub struct SongTags {
@@ -34,4 +34,10 @@ impl SongTags {
             track_number: tag.track_number(),
         })
     }
+}
+
+#[cfg(any(test, feature = "integration-tests"))]
+pub mod tests {
+    pub mod common;
+    pub use common::*;
 }
