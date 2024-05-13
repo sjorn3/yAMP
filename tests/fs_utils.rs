@@ -1,11 +1,13 @@
 #![allow(clippy::missing_errors_doc)]
 
+use std::path::PathBuf;
 use std::{fs::File, path::Path};
 
+use audiotags::Tag;
 use fake::{Dummy, Fake, Faker};
 use id3::{Tag as ID3Tag, TagLike, Version};
 use music_cache::tests::common::*;
-use music_cache::{Song, SongTags};
+use music_cache::{Album, Song, SongTags};
 use tempfile::tempdir;
 
 #[test]
@@ -14,10 +16,15 @@ fn test_round_trip_dummy_mp3() -> Result {
 
     let temp_path = dir.path().join("music.mp3");
 
-    let song_tags: SongTags = Faker.fake();
+    let album: Album = Faker.fake();
+    let song = Song {
+        filepath: temp_path.clone(),
+        tags: Faker.fake(),
+        album: &album,
+    };
 
-    write_tags_to_path(&temp_path, &song_tags)?;
-    check_tags_from_path(&temp_path, &song_tags)?;
+    write_tags_to_path(&temp_path, &song)?;
+    check_tags_from_path(&temp_path, &song)?;
 
     Ok(())
 }
@@ -58,10 +65,16 @@ impl SkeletonFileTree {
             std::fs::create_dir(&new_path)?;
             dir.generate_file_structure(&new_path)?;
         }
+        let album: Album = Faker.fake();
         for file in 0..self.files {
             let new_path = path.join(file.to_string() + ".mp3");
-            let song_tags: SongTags = Faker.fake();
-            write_tags_to_path(&new_path, &song_tags)?;
+            let tags: SongTags = Faker.fake();
+            let song = Song {
+                filepath: PathBuf::new(),
+                tags,
+                album: &album,
+            };
+            write_tags_to_path(&new_path, &song)?;
         }
         Ok(())
     }
@@ -69,7 +82,7 @@ impl SkeletonFileTree {
 
 // id3 is here is because it allows writing to an empty file. audiotags does not.
 // would otherwise need to keep a dummy mp3 file and constantly copy it around.
-fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
+fn write_tags_to_path(path: &Path, song: &Song) -> Result {
     File::create(path)?;
 
     let mut tag = ID3Tag::new();
@@ -78,7 +91,7 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
         tag.set_album(album);
     }
 
-    if let Some(title) = &song.title {
+    if let Some(title) = &song.tags.title {
         tag.set_title(title);
     }
 
@@ -90,7 +103,7 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
         tag.set_year(i32::from(*year));
     }
 
-    if let Some(track_number) = &song.track_number {
+    if let Some(track_number) = &song.tags.track_number {
         tag.set_track(u32::from(*track_number));
     }
 
@@ -98,9 +111,11 @@ fn write_tags_to_path(path: &Path, song: &SongTags) -> Result {
     Ok(())
 }
 
-fn check_tags_from_path(path: &Path, song_tags: &SongTags) -> Result {
-    let song = &Song::from_path(path)?;
-    assert_eq!(song.filepath, path.to_path_buf());
-    assert_eq!(&song.song_tags, song_tags);
+fn check_tags_from_path(path: &Path, song: &Song) -> Result {
+    let tag = Tag::new().read_from_path(path)?;
+    let album = Album::read(&tag);
+    let tags = SongTags::read(&tag);
+    assert_eq!(song.tags, tags);
+    assert_eq!(song.album, &album);
     Ok(())
 }
