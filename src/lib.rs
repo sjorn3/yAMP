@@ -1,44 +1,39 @@
 #![allow(clippy::missing_errors_doc)]
 
-use audiotags::Tag;
 use jwalk::WalkDir;
 use rkyv::{Archive, Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-pub struct Song<'a> {
-    // I don't think this will be resilient to moving the library dir.
-    // The real solution here is to have the user specify library location
-    // and then store the relative path.
-    pub filepath: PathBuf,
-    pub tags: SongTags,
-    pub album: &'a Album,
-}
-
-// There are many tags on a music file, but we only care about:
-//   - Track Title
-//   - Album Artist
-//   - Year
-//   - Track Number
-//   - Album Title
-
-// Album Art can come later for now.
 #[cfg_attr(
     feature = "integration-tests",
     derive(Debug, fake::Dummy, PartialEq, Eq, Clone)
 )]
 #[derive(Archive, Serialize, Deserialize)]
-#[archive_attr(derive(Debug))]
-#[archive(
-    // This will generate a PartialEq impl between our unarchived and archived
-    // types:
-    compare(PartialEq),
-    // bytecheck can be used to validate your data if you want. To use the safe
-    // API, you have to derive CheckBytes for the archived type:
-    check_bytes,
-)]
 pub struct SongTags {
     pub title: Option<String>,
     pub track_number: Option<u16>,
+}
+
+#[cfg_attr(
+    feature = "integration-tests",
+    derive(Debug, fake::Dummy, PartialEq, Eq, Clone)
+)]
+#[derive(Archive, Serialize, Deserialize)]
+pub struct Song {
+    pub tags: SongTags,
+    // converting a path to a utf8 string might not be valid and there's no Archive instance for PathBuf so just store it as bytes.
+    pub relpath: Vec<u8>,
+}
+
+#[cfg_attr(
+    feature = "integration-tests",
+    derive(Debug, fake::Dummy, PartialEq, Eq)
+)]
+#[derive(Archive, Serialize, Deserialize)]
+pub struct AlbumTags {
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub year: Option<u16>,
 }
 
 #[cfg_attr(
@@ -47,16 +42,15 @@ pub struct SongTags {
 )]
 #[derive(Archive, Serialize, Deserialize)]
 pub struct Album {
-    pub artist: Option<String>,
-    pub title: Option<String>,
-    pub year: Option<u16>,
+    pub tags: AlbumTags,
+    pub songs: Vec<Song>,
 }
 
 type AudioTag = Box<dyn audiotags::AudioTag + Send + Sync>;
 
-impl Album {
-    pub fn read(tag: &AudioTag) -> Album {
-        Album {
+impl AlbumTags {
+    pub fn read(tag: &AudioTag) -> AlbumTags {
+        AlbumTags {
             artist: tag.album_artist().map(ToString::to_string),
             title: tag.album_title().map(ToString::to_string),
             year: tag.year().and_then(|y| y.try_into().ok()),
@@ -73,17 +67,12 @@ impl SongTags {
     }
 }
 
-impl<'a> Song<'a> {
-    pub fn from_path(
-        path: &Path,
-        album: &'a Album,
-    ) -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        let tag = Tag::new().read_from_path(path)?;
-        Ok(Self {
-            filepath: path.to_path_buf(),
-            tags: SongTags::read(&tag),
-            album,
-        })
+impl Song {
+    pub fn read(tag: &AudioTag, relpath: &Path) -> Song {
+        Song {
+            tags: SongTags::read(tag),
+            relpath: relpath.to_path_buf().into_os_string().into_encoded_bytes(),
+        }
     }
 }
 

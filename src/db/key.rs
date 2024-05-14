@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{Album, SongTags};
+use crate::{Album, AlbumTags, Song};
 
 #[repr(u8)]
 #[cfg_attr(
@@ -9,17 +9,24 @@ use crate::{Album, SongTags};
 )]
 // Add new fields at the end to not break existing keys.
 pub enum KeyType {
-    SongTags,
+    Song,
     Album,
+    AlbumTags,
 }
 
 pub trait Taggable {
     fn tag(&self) -> KeyType;
 }
 
-impl Taggable for SongTags {
+impl Taggable for Song {
     fn tag(&self) -> KeyType {
-        KeyType::SongTags
+        KeyType::Song
+    }
+}
+
+impl Taggable for AlbumTags {
+    fn tag(&self) -> KeyType {
+        KeyType::AlbumTags
     }
 }
 

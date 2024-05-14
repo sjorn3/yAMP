@@ -23,12 +23,12 @@ static DB: Lazy<sled::Db> = Lazy::new(|| sled::open(TEMP_DIR.path()).unwrap());
 #[test]
 fn test_db_round_trip() -> Result {
     let tree = &*DB;
-    let tags: SongTags = Faker.fake();
+    let tags: Song = Faker.fake();
     let key = tree.generate_key(&tags)?;
 
     {
-        let archived_tags: SongTags = tags.clone();
-        let bytes = rkyv::to_bytes::<SongTags, 1024>(&archived_tags)?;
+        let archived_tags: Song = tags.clone();
+        let bytes = rkyv::to_bytes::<Song, 1024>(&archived_tags)?;
         tree.insert(&key, bytes.as_slice())?;
     }
 
@@ -39,7 +39,7 @@ fn test_db_round_trip() -> Result {
     // the bytecheck stuff doesn't fix the alignment issue.
 
     // I could maybe think about forking sled to have alignment. But that's a pretty big undertaking and I don't know what the tradeoffs are.
-    let restored: SongTags = unsafe { rkyv::from_bytes_unchecked(&value.to_vec())? };
+    let restored: Song = unsafe { rkyv::from_bytes_unchecked(&value.to_vec())? };
     assert_eq!(tags, restored);
     Ok(())
 }
@@ -48,17 +48,17 @@ fn test_db_round_trip() -> Result {
 fn test_db_scan_prefix() -> Result {
     let dir = TempDir::new().unwrap();
     let tree = sled::open(dir.path()).unwrap();
-    let tags: SongTags = Faker.fake();
+    let tags: Song = Faker.fake();
 
     let key = tree.generate_key(&tags)?;
 
-    let first_value = rkyv::to_bytes::<SongTags, 1024>(&tags)?;
+    let first_value = rkyv::to_bytes::<Song, 1024>(&tags)?;
     tree.insert(key, first_value.as_ref())?;
 
-    for x in tree.scan_prefix(KeyType::SongTags) {
+    for x in tree.scan_prefix(KeyType::Song) {
         let (key, value) = x?;
         #[allow(clippy::unnecessary_to_owned)]
-        let restore: SongTags = unsafe { rkyv::from_bytes_unchecked(&value.to_vec())? };
+        let restore: Song = unsafe { rkyv::from_bytes_unchecked(&value.to_vec())? };
         assert_eq!(restore, tags);
         assert_eq!(key.to_vec(), key.as_ref().to_vec());
     }
