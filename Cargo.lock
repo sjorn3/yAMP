@@ -441,12 +441,21 @@ dependencies = [
  "fake",
  "id3",
  "jwalk",
+ "music-cache-derive",
  "once_cell",
  "rand",
  "rkyv",
  "sled",
  "tempfile",
  "zerocopy",
+]
+
+[[package]]
+name = "music-cache-derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 2.0.63",
 ]
 
 [[package]]

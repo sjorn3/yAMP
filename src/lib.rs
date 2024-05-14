@@ -1,46 +1,31 @@
 #![allow(clippy::missing_errors_doc)]
 
 use jwalk::WalkDir;
+use music_cache_derive::derive_data_model;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::path::Path;
 
-#[cfg_attr(
-    feature = "integration-tests",
-    derive(Debug, fake::Dummy, PartialEq, Eq, Clone)
-)]
-#[derive(Archive, Serialize, Deserialize)]
+#[derive_data_model]
 pub struct SongTags {
     pub title: Option<String>,
     pub track_number: Option<u16>,
 }
 
-#[cfg_attr(
-    feature = "integration-tests",
-    derive(Debug, fake::Dummy, PartialEq, Eq, Clone)
-)]
-#[derive(Archive, Serialize, Deserialize)]
+#[derive_data_model]
 pub struct Song {
     pub tags: SongTags,
     // converting a path to a utf8 string might not be valid and there's no Archive instance for PathBuf so just store it as bytes.
     pub relpath: Vec<u8>,
 }
 
-#[cfg_attr(
-    feature = "integration-tests",
-    derive(Debug, fake::Dummy, PartialEq, Eq)
-)]
-#[derive(Archive, Serialize, Deserialize)]
+#[derive_data_model]
 pub struct AlbumTags {
     pub artist: Option<String>,
     pub title: Option<String>,
     pub year: Option<u16>,
 }
 
-#[cfg_attr(
-    feature = "integration-tests",
-    derive(Debug, fake::Dummy, PartialEq, Eq)
-)]
-#[derive(Archive, Serialize, Deserialize)]
+#[derive_data_model]
 pub struct Album {
     pub tags: AlbumTags,
     pub songs: Vec<Song>,
