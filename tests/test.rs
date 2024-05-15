@@ -38,8 +38,8 @@ fn test_db_retrieve_song_by_path() -> Result {
     let tags2: Song = Faker.fake();
     tree.insert_metadata(&tags)?;
     tree.insert_metadata(&tags2)?;
-    let restored = tree.get_song_from_path(&tags.relpath)?;
-    let restored2 = tree.get_song_from_path(&tags2.relpath)?;
+    let restored = tree.get_song_from_path(&tags.relpath)?()?;
+    let restored2 = tree.get_song_from_path(&tags2.relpath)?()?;
     assert_eq!(tags, restored);
     assert_eq!(tags2, restored2);
     Ok(())

@@ -1,7 +1,7 @@
 use music_cache_derive::derive_data_model;
 use std::time::SystemTime;
 
-use crate::{Album, AlbumTags, ByteKey, Key, KeyDBHelpers, KeyType, Result, Song};
+use crate::{Album, AlbumTags, ByteKey, Key, KeyDBHelpers, KeyType, Lazy, Result, Song};
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
@@ -94,7 +94,7 @@ pub trait Helpers {
     fn scan_songs(&self) -> impl Iterator<Item = Result<Song>>;
     fn scan_album_tags(&self) -> impl Iterator<Item = Result<AlbumTags>>;
     fn insert_song_from_path(&self, song_key: &Key, relpath: &[u8]) -> Result<()>;
-    fn get_song_from_path(&self, relpath: &[u8]) -> Result<Song>;
+    fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>>;
     fn set_last_scan_time(&self) -> Result<()>;
     fn get_last_scan_time(&self) -> Result<SystemTime>;
 }
@@ -132,12 +132,14 @@ impl Helpers for sled::Db {
         Ok(())
     }
 
-    fn get_song_from_path(&self, relpath: &[u8]) -> Result<Song> {
+    fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>> {
         let key = self
             .get(hash_key(KeyType::SongPath, relpath))?
             .ok_or("Could not find path in db")?;
-        let bytes = self.get(key)?.ok_or("Could not find song tags key in db")?;
-        Ok(unsafe { rkyv::from_bytes_unchecked(&bytes.to_vec())? })
+        Ok(Box::new(move || {
+            let bytes = self.get(key)?.ok_or("Could not find song tags key in db")?;
+            Ok(unsafe { rkyv::from_bytes_unchecked(&bytes.to_vec())? })
+        }))
     }
 
     fn set_last_scan_time(&self) -> Result<()> {
