@@ -5,19 +5,19 @@ use music_cache_derive::{derive_data_model, taggable};
 use crate::{Album, AlbumTags, Result, Song};
 
 #[repr(u8)]
-#[taggable]
+#[taggable(Song, Album, AlbumTags)]
 #[derive_data_model]
 // Variant names should exactly match types they are keys for.
 pub enum KeyType {
     Song,
     Album,
     AlbumTags,
+    LastScanTime,
+    SongPath,
 }
 
 #[repr(packed)]
 pub struct Key {
-    // No function is provided to convert back to a key from bytes. This is intentional.
-    // Instead you should always be wiring a retrieved byte key directly back into sled to retrieve the next value.
     _tag: KeyType,
     _id: u64,
 }
@@ -41,6 +41,12 @@ impl AsRef<[u8]> for Key {
         unsafe {
             std::slice::from_raw_parts(self as *const Self as *const u8, mem::size_of::<Self>())
         }
+    }
+}
+
+impl AsRef<Key> for [u8] {
+    fn as_ref(&self) -> &Key {
+        unsafe { &*(self as *const Self as *const Key) }
     }
 }
 

@@ -42,7 +42,7 @@ impl Dummy<Faker> for SkeletonFileTree {
                 dirs: if next_depth == 0 {
                     Vec::new()
                 } else {
-                    (0..rng.gen_range(0..5))
+                    (0..rng.gen_range(0..4))
                         .map(|_| gen_tree(rng, next_depth))
                         .collect()
                 },

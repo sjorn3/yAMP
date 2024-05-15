@@ -2,7 +2,10 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Ident};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Data, DeriveInput, Ident, Token,
+};
 
 #[proc_macro_attribute]
 pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -22,8 +25,26 @@ pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(quote! { #input })
 }
 
+struct TaggableAttr {
+    include: Vec<Ident>,
+}
+
+impl Parse for TaggableAttr {
+    fn parse(input: ParseStream) -> Result<Self, syn::Error> {
+        let mut include = Vec::new();
+        while !input.is_empty() {
+            include.push(input.parse::<Ident>()?);
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
+        }
+        Ok(TaggableAttr { include })
+    }
+}
+
 #[proc_macro_attribute]
-pub fn taggable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn taggable(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let TaggableAttr { include } = parse_macro_input!(attr as TaggableAttr);
     let input = parse_macro_input!(item as DeriveInput);
 
     let name = &input.ident;
@@ -34,15 +55,18 @@ pub fn taggable(_attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let trait_name = Ident::new(&format!("Taggable{}", name), name.span());
-    let methods = variants.iter().map(|variant| {
+    let methods = variants.iter().filter_map(|variant| {
         let variant_name = &variant.ident;
-
-        quote! {
-            impl #trait_name for #variant_name {
-                fn tag(&self) -> #name {
-                    #name::#variant_name
+        if include.contains(variant_name) {
+            Some(quote! {
+                impl #trait_name for #variant_name {
+                    fn tag(&self) -> #name {
+                        #name::#variant_name
+                    }
                 }
-            }
+            })
+        } else {
+            None
         }
     });
 
