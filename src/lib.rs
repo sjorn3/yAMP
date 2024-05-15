@@ -11,11 +11,12 @@ pub fn walk(dir: &Path) {
                 .as_ref()
                 .map(|dir_entry: &jwalk::DirEntry<((), ())>| {
                     // dir_entry.i
-                    dir_entry
-                        .file_name
-                        .to_str()
-                        .map(|s| s.ends_with(".mp3"))
-                        .unwrap_or(false)
+                    dir_entry.file_type.is_file()
+                        && dir_entry
+                            .file_name
+                            .to_str()
+                            .map(|s| s.ends_with(".mp3"))
+                            .unwrap_or(false)
                 })
                 .unwrap_or(false)
         });

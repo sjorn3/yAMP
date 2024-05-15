@@ -4,7 +4,6 @@ use fs_utils::SkeletonFileTree;
 
 use fake::{Fake, Faker};
 use music_cache::{tests::common::Result, *};
-use once_cell::sync::Lazy;
 use tempfile::*;
 
 #[test]
@@ -17,12 +16,10 @@ fn test_gen_file_tree() -> Result {
     Ok(())
 }
 
-static TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
-static DB: Lazy<sled::Db> = Lazy::new(|| sled::open(TEMP_DIR.path()).unwrap());
-
 #[test]
 fn test_db_round_trip() -> Result {
-    let tree = &*DB;
+    let dir = TempDir::new().unwrap();
+    let tree = sled::open(dir.path()).unwrap();
     let tags: Song = Faker.fake();
     let key = {
         // Archived tags will be freed before restoring, verifying that no pointers are stored.
@@ -42,10 +39,36 @@ fn test_db_scan_songs() -> Result {
 
     tree.insert_metadata(&tags)?;
 
-    let songs = tree.scan_songs();
-
-    for song in songs {
+    for song in tree.scan_songs() {
         assert_eq!(song?, tags);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_db_scan_album_tags() -> Result {
+    let dir = TempDir::new().unwrap();
+    let tree = sled::open(dir.path()).unwrap();
+    let tags: AlbumTags = Faker.fake();
+
+    tree.insert_metadata(&tags)?;
+
+    for album_tag in tree.scan_album_tags() {
+        assert_eq!(album_tag?, tags);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_db_scan_albums() -> Result {
+    let dir = TempDir::new().unwrap();
+    let tree = sled::open(dir.path()).unwrap();
+    let album: Album = Faker.fake();
+
+    tree.insert_metadata(&album)?;
+
+    for restored_album in tree.scan_albums() {
+        assert_eq!(restored_album?, album);
     }
     Ok(())
 }
