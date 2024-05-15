@@ -42,10 +42,10 @@ fn test_db_scan_songs() -> Result {
 
     tree.insert_metadata(&tags)?;
 
-    let songs: Vec<Song> = tree.scan()?;
+    let songs = tree.scan_songs();
 
     for song in songs {
-        assert_eq!(song, tags);
+        assert_eq!(song?, tags);
     }
     Ok(())
 }
