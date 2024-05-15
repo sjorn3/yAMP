@@ -8,9 +8,9 @@ use crate::{Album, AlbumTags, Song};
 #[taggable]
 // Variant names should exactly match types they are keys for.
 pub enum KeyType {
-    Song = 0,
-    Album = 1,
-    AlbumTags = 2,
+    Song,
+    Album,
+    AlbumTags,
 }
 
 #[repr(packed)]
