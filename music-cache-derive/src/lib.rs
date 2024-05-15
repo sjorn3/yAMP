@@ -9,7 +9,7 @@ pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(item as DeriveInput);
 
     input.attrs.push(syn::parse_quote! {
-        #[derive(Archive, Serialize, Deserialize)]
+        #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
     });
 
     input.attrs.push(syn::parse_quote! {

@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use jwalk::WalkDir;
-use std::path::Path;
+use std::{error::Error, path::Path};
 
 pub fn walk(dir: &Path) {
     let mut count = 0;
@@ -40,3 +40,5 @@ pub use db::*;
 
 pub mod music_metadata;
 pub use music_metadata::*;
+
+pub type Result<T> = std::result::Result<T, Box<dyn Error>>;

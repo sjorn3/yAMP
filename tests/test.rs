@@ -3,7 +3,7 @@ mod fs_utils;
 use fs_utils::SkeletonFileTree;
 
 use fake::{Fake, Faker};
-use music_cache::{tests::common::*, *};
+use music_cache::{tests::common::Result, *};
 use once_cell::sync::Lazy;
 use tempfile::*;
 
@@ -24,43 +24,28 @@ static DB: Lazy<sled::Db> = Lazy::new(|| sled::open(TEMP_DIR.path()).unwrap());
 fn test_db_round_trip() -> Result {
     let tree = &*DB;
     let tags: Song = Faker.fake();
-    let key = tree.generate_key(&tags)?;
-
-    {
-        let archived_tags: Song = tags.clone();
-        let bytes = rkyv::to_bytes::<Song, 1024>(&archived_tags)?;
-        tree.insert(&key, bytes.as_slice())?;
-    }
-
-    let value = tree.get(&key)?.unwrap();
-    #[allow(clippy::unnecessary_to_owned)]
-    // Unfortunately sled doesn't guarantee alignment, so push the value into a vector to ensure it's aligned, adding a copy.
-    // If I'm doing this anyway, rkyv has some bytecheck features that might be worth looking into.
-    // the bytecheck stuff doesn't fix the alignment issue.
-
-    // I could maybe think about forking sled to have alignment. But that's a pretty big undertaking and I don't know what the tradeoffs are.
-    let restored: Song = unsafe { rkyv::from_bytes_unchecked(&value.to_vec())? };
+    let key = {
+        // Archived tags will be freed before restoring, verifying that no pointers are stored.
+        let archived_tags = tags.clone();
+        tree.insert_metadata(&archived_tags)?
+    };
+    let restored: Song = tree.get_metadata(&key)?;
     assert_eq!(tags, restored);
     Ok(())
 }
 
 #[test]
-fn test_db_scan_prefix() -> Result {
+fn test_db_scan_songs() -> Result {
     let dir = TempDir::new().unwrap();
     let tree = sled::open(dir.path()).unwrap();
     let tags: Song = Faker.fake();
 
-    let key = tree.generate_key(&tags)?;
+    tree.insert_metadata(&tags)?;
 
-    let first_value = rkyv::to_bytes::<Song, 1024>(&tags)?;
-    tree.insert(key, first_value.as_ref())?;
+    let songs: Vec<Song> = tree.scan()?;
 
-    for x in tree.scan_prefix(KeyType::Song) {
-        let (key, value) = x?;
-        #[allow(clippy::unnecessary_to_owned)]
-        let restore: Song = unsafe { rkyv::from_bytes_unchecked(&value.to_vec())? };
-        assert_eq!(restore, tags);
-        assert_eq!(key.to_vec(), key.as_ref().to_vec());
+    for song in songs {
+        assert_eq!(song, tags);
     }
     Ok(())
 }
