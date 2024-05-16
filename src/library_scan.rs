@@ -40,6 +40,15 @@ fn add_song_to_album(bytes: &[u8], song: &Song, song_key: ByteKey) -> Result<Sto
     Ok(album)
 }
 
+fn remove_song_from_album(bytes: &[u8], song_key: ByteKey) -> Result<Option<StoredAlbum>> {
+    let mut album = StoredAlbum::partial_deserialize_album(bytes)?;
+    if album.song_keys.len() == 1 {
+        return Ok(None);
+    }
+    album.song_keys.retain(|&(_, key)| key != song_key);
+    Ok(Some(album))
+}
+
 pub fn album_upsert(
     tree: &sled::Db,
     album_tags: &AlbumTags,
