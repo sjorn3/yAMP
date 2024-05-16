@@ -60,20 +60,6 @@ fn test_db_scan_songs() -> Result {
 }
 
 #[test]
-fn test_db_scan_album_tags() -> Result {
-    let dir = TempDir::new().unwrap();
-    let tree = sled::open(dir.path()).unwrap();
-    let tags: AlbumTags = Faker.fake();
-
-    tree.insert_metadata(&tags)?;
-
-    for album_tag in tree.scan_album_tags() {
-        assert_eq!(album_tag?, tags);
-    }
-    Ok(())
-}
-
-#[test]
 fn test_db_scan_albums() -> Result {
     let dir = TempDir::new().unwrap();
     let tree = sled::open(dir.path()).unwrap();

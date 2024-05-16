@@ -15,7 +15,6 @@ use crate::{Album, AlbumTags, Result, Song};
 pub enum KeyType {
     Song,
     Album,
-    AlbumTags,
     LastScanTime,
 }
 
@@ -106,7 +105,7 @@ impl HashKeyGen for AlbumTags {
         hasher.maybe_write(&self.title);
         hasher.maybe_write_u16(&self.year);
 
-        hash_key(KeyType::AlbumTags, hasher)
+        hash_key(KeyType::Album, hasher)
     }
 }
 

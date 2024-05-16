@@ -15,7 +15,7 @@ use std::path::Path;
 // 4. Once complete for all files, update global last scan time. As such, if a panic occurs during the scan, it will restart on the next run. Progress will be saved although work will be repeated anyway.
 
 // Album upsert algorithm
-// 1. Search for an album tags object with the matching tags. (This might be faster with tantivy if that's integrated. We could use hash keys for album tags to save the search.)
+// 1. lookup album_tags.hash_key()
 // 2. If it exists,
 //    1. find the album and add the song to the album. (potentially albums should have their song keys as a Btreemap so I can insert songs with their track number and get them back in order, also it would help if album tags reverse pointed to the album to save lookup time.)
 // 3. If it does not exist, insert a new album, with this song as the only song, and create a new album tags object.
@@ -26,6 +26,8 @@ use std::path::Path;
 // This would potentially be faster but in general songs that are in the same album should be processed at a similar time if the folder structure is at all sensible, so we should be "lucky" with cache hits more often.
 // Further, writing to disk is going to be a big bottleneck so the earlier it can be started the better.
 // Also, if we imagine the UI is running in a seperate thread, it could potentially start showing music whilst it's being found, which could be kind of neat.
+
+// pub fn album_upsert(
 
 pub fn walk(dir: &Path) {
     let mut count = 0;
