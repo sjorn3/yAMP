@@ -1,5 +1,8 @@
 use fake::{Fake, Faker};
-use music_cache::{tests::common::Result, *};
+use music_cache::{
+    tests::{common::Result, Arbitrary},
+    *,
+};
 use tempfile::*;
 
 mod fs_utils;
