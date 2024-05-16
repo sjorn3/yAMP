@@ -4,7 +4,7 @@ use std::path::Path;
 // Algorithm
 // 1. Walk the directory
 // 2. For each file attempt to read the tags (audiotags will early exit if it doesn't know the extension)
-//    1. Also, load all KeyType::SongPaths into memory in a set with quick deletion, and remove all that are found in the walk. Remove any remaining keys from the db at the end.
+//    1. Also, load all KeyType::Songs into memory in a set with quick deletion, and remove all that are found in the walk. Remove any remaining keys from the db at the end.
 // 3. If the tags are read successfully
 //    1. Check if the file path exists as a key in the db.
 //    2. If it does exist, check the modification time of the file, overwrite the songtags in the db if newer than global last scan time.
@@ -15,8 +15,8 @@ use std::path::Path;
 // 4. Once complete for all files, update global last scan time. As such, if a panic occurs during the scan, it will restart on the next run. Progress will be saved although work will be repeated anyway.
 
 // Album upsert algorithm
-// 1. Search for an album tags object with the matching tags. (This might be faster with tantivy if that's integrated)
-// 2. If it exists, 
+// 1. Search for an album tags object with the matching tags. (This might be faster with tantivy if that's integrated. We could use hash keys for album tags to save the search.)
+// 2. If it exists,
 //    1. find the album and add the song to the album. (potentially albums should have their song keys as a Btreemap so I can insert songs with their track number and get them back in order, also it would help if album tags reverse pointed to the album to save lookup time.)
 // 3. If it does not exist, insert a new album, with this song as the only song, and create a new album tags object.
 

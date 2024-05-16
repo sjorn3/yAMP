@@ -1,10 +1,7 @@
 use music_cache_derive::derive_data_model;
 use std::time::SystemTime;
 
-use crate::{Album, AlbumTags, ByteKey, Key, KeyDBHelpers, KeyType, Lazy, Result, Song};
-
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
+use crate::*;
 
 // If I wanted to get rid of rkyv entirely - I could probably insert all the strings in a given struct into the sled db and then just store the keys into packed structs.
 // This might need some kind of benching though because it's not obvious which would be faster. I.e. one requires a bunch of lookups and the other requires copy to archive type and the alignment copy.
@@ -19,7 +16,7 @@ pub trait Methods<T> {
 
 impl Methods<AlbumTags> for sled::Db {
     fn insert_metadata(&self, album_tags: &AlbumTags) -> Result<Key> {
-        let key = self.generate_key(album_tags)?;
+        let key = album_tags.hash_key();
         let bytes = rkyv::to_bytes::<AlbumTags, 1024>(album_tags)?;
         self.insert(&key, bytes.as_slice())?;
         Ok(key)
@@ -35,10 +32,9 @@ impl Methods<AlbumTags> for sled::Db {
 
 impl Methods<Song> for sled::Db {
     fn insert_metadata(&self, song: &Song) -> Result<Key> {
-        let key = self.generate_key(song)?;
+        let key = song.hash_key();
         let bytes = rkyv::to_bytes::<Song, 1024>(song)?;
         self.insert(&key, bytes.as_slice())?;
-        self.insert_song_from_path(&key, &song.relpath)?;
         Ok(key)
     }
 
@@ -93,7 +89,6 @@ pub trait Helpers {
     fn scan_albums(&self) -> impl Iterator<Item = Result<Album>>;
     fn scan_songs(&self) -> impl Iterator<Item = Result<Song>>;
     fn scan_album_tags(&self) -> impl Iterator<Item = Result<AlbumTags>>;
-    fn insert_song_from_path(&self, song_key: &Key, relpath: &[u8]) -> Result<()>;
     fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>>;
     fn set_last_scan_time(&self) -> Result<()>;
     fn get_last_scan_time(&self) -> Result<SystemTime>;
@@ -127,15 +122,8 @@ impl Helpers for sled::Db {
         })
     }
 
-    fn insert_song_from_path(&self, song_key: &Key, relpath: &[u8]) -> Result<()> {
-        self.insert::<_, &[u8]>(hash_key(KeyType::SongPath, relpath), song_key.as_ref())?;
-        Ok(())
-    }
-
     fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>> {
-        let key = self
-            .get(hash_key(KeyType::SongPath, relpath))?
-            .ok_or("Could not find path in db")?;
+        let key = song_hash_key(relpath);
         Ok(Box::new(move || {
             let bytes = self.get(key)?.ok_or("Could not find song tags key in db")?;
             Ok(unsafe { rkyv::from_bytes_unchecked(&bytes.to_vec())? })
@@ -157,14 +145,4 @@ impl Helpers for sled::Db {
             .to_vec();
         Ok(unsafe { *(bytes.as_ptr() as *const SystemTime) })
     }
-}
-
-fn hash_key(key_type: KeyType, data: &[u8]) -> [u8; 9] {
-    let mut hasher = DefaultHasher::new();
-    hasher.write(data);
-    let hash = hasher.finish();
-    let mut key = [0; 9];
-    key[0] = key_type as u8;
-    key[1..].copy_from_slice(&hash.to_ne_bytes());
-    key
 }

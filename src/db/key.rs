@@ -1,6 +1,10 @@
-use std::mem;
+use std::{
+    hash::{DefaultHasher, Hasher},
+    mem,
+};
 
 use music_cache_derive::{derive_data_model, taggable};
+use zerocopy::AsBytes;
 
 use crate::{Album, AlbumTags, Result, Song};
 
@@ -13,7 +17,6 @@ pub enum KeyType {
     Album,
     AlbumTags,
     LastScanTime,
-    SongPath,
 }
 
 #[repr(packed)]
@@ -68,5 +71,60 @@ impl KeyDBHelpers for sled::Db {
             _tag: value.tag(),
             _id: self.generate_id()?,
         })
+    }
+}
+
+pub fn hash_key(key_type: KeyType, hasher: impl Hasher) -> Key {
+    let hash = hasher.finish();
+    Key {
+        _tag: key_type,
+        _id: hash,
+    }
+}
+
+pub trait HashKeyGen {
+    fn hash_key(&self) -> Key;
+}
+
+pub fn song_hash_key(relpath: &[u8]) -> Key {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(relpath);
+    hash_key(KeyType::Song, hasher)
+}
+
+impl HashKeyGen for Song {
+    fn hash_key(&self) -> Key {
+        song_hash_key(&self.relpath)
+    }
+}
+
+impl HashKeyGen for AlbumTags {
+    fn hash_key(&self) -> Key {
+        let mut hasher = DefaultHasher::new();
+
+        hasher.maybe_write(&self.artist);
+        hasher.maybe_write(&self.title);
+        hasher.maybe_write_u16(&self.year);
+
+        hash_key(KeyType::AlbumTags, hasher)
+    }
+}
+
+trait HashMaybeWrite {
+    fn maybe_write(&mut self, val: &Option<String>);
+    fn maybe_write_u16(&mut self, val: &Option<u16>);
+}
+
+impl HashMaybeWrite for DefaultHasher {
+    fn maybe_write(&mut self, value: &Option<String>) {
+        if let Some(string) = value {
+            self.write(string.as_bytes());
+        }
+    }
+
+    fn maybe_write_u16(&mut self, val: &Option<u16>) {
+        if let Some(val) = val {
+            self.write(val.as_bytes());
+        }
     }
 }
