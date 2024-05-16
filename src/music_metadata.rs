@@ -14,10 +14,7 @@ pub struct SongTags {
     pub track_number: Option<u16>,
 }
 
-#[cfg_attr(
-    feature = "integration-tests",
-    derive(Debug, fake::Dummy, PartialEq, Eq, Clone)
-)]
+#[cfg_attr(feature = "integration-tests", derive(Debug, PartialEq, Eq, Clone))]
 pub struct Album {
     pub tags: AlbumTags,
     pub songs: Vec<Song>,

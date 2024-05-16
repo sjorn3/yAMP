@@ -3,7 +3,7 @@
 use std::{fs::File, path::Path};
 
 use audiotags::Tag;
-use fake::{Dummy, Fake, Faker};
+use fake::{Dummy, Faker};
 use id3::{Tag as ID3Tag, TagLike, Version};
 use music_cache::tests::common::*;
 use music_cache::{AlbumTags, SongTags};
@@ -15,8 +15,8 @@ fn test_round_trip_dummy_mp3() -> Result {
 
     let temp_path = dir.path().join("music.mp3");
 
-    let album: AlbumTags = Faker.fake();
-    let song_tags: SongTags = Faker.fake();
+    let album = AlbumTags::arbitrary();
+    let song_tags = SongTags::arbitrary();
 
     write_tags_to_path(&temp_path, &album, &song_tags)?;
     check_tags_from_path(&temp_path, &album, &song_tags)?;
@@ -60,10 +60,10 @@ impl SkeletonFileTree {
             std::fs::create_dir(&new_path)?;
             dir.generate_file_structure(&new_path)?;
         }
-        let album_tags: AlbumTags = Faker.fake();
+        let album_tags = AlbumTags::arbitrary();
         for file in 0..self.files {
             let new_path = path.join(file.to_string() + ".mp3");
-            let song_tags = Faker.fake();
+            let song_tags = SongTags::arbitrary();
             write_tags_to_path(&new_path, &album_tags, &song_tags)?;
         }
         Ok(())

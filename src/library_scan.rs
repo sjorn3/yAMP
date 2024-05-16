@@ -1,6 +1,8 @@
 use jwalk::WalkDir;
 use std::path::Path;
 
+use crate::{AlbumTags, ByteKey, HashKeyGen, Key, Result, Song, StoredAlbum};
+
 // Algorithm
 // 1. Walk the directory
 // 2. For each file attempt to read the tags (audiotags will early exit if it doesn't know the extension)
@@ -16,8 +18,7 @@ use std::path::Path;
 
 // Album upsert algorithm
 // 1. lookup album_tags.hash_key()
-// 2. If it exists,
-//    1. find the album and add the song to the album. (potentially albums should have their song keys as a Btreemap so I can insert songs with their track number and get them back in order, also it would help if album tags reverse pointed to the album to save lookup time.)
+// 2. If it exists add the song to the album. (potentially albums should have their song keys as a Btreemap so I can insert songs with their track number and get them back in order, also it would help if album tags reverse pointed to the album to save lookup time.)
 // 3. If it does not exist, insert a new album, with this song as the only song, and create a new album tags object.
 
 // Every stage above that involving writes should lock the relevant keys for safety, but I believe that sled will do that already if I use the right methods at each stage.
@@ -27,7 +28,37 @@ use std::path::Path;
 // Further, writing to disk is going to be a big bottleneck so the earlier it can be started the better.
 // Also, if we imagine the UI is running in a seperate thread, it could potentially start showing music whilst it's being found, which could be kind of neat.
 
-// pub fn album_upsert(
+fn add_song_to_album(bytes: &[u8], song: &Song, song_key: ByteKey) -> Result<StoredAlbum> {
+    let mut album = StoredAlbum::partial_deserialize_album(bytes)?;
+    let index = album
+        .song_keys
+        .binary_search_by(|probe| probe.0.cmp(&song.tags.track_number))
+        .unwrap_or_else(|x| x);
+    album
+        .song_keys
+        .insert(index, (song.tags.track_number, song_key));
+    Ok(album)
+}
+
+pub fn album_upsert(
+    tree: &sled::Db,
+    album_tags: &AlbumTags,
+    song: &Song,
+    song_key: Key,
+) -> Result<()> {
+    let album_key = album_tags.hash_key();
+    let byte_key = song_key.to_byte_key();
+    // Sadly update_and_fetch doesn't preserve Result types, so unwrap and hope for the best.
+    tree.update_and_fetch(album_key, |maybe_bytes| {
+        let new_album = if let Some(bytes) = maybe_bytes {
+            add_song_to_album(bytes, song, byte_key).unwrap()
+        } else {
+            StoredAlbum::new(album_tags, (song.tags.track_number, byte_key))
+        };
+        Some(new_album)
+    })?;
+    Ok(())
+}
 
 pub fn walk(dir: &Path) {
     let mut count = 0;

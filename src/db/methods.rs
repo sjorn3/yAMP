@@ -1,5 +1,6 @@
 use music_cache_derive::derive_data_model;
-use rkyv::Deserialize;
+use rkyv::{AlignedVec, Deserialize};
+use sled::IVec;
 use std::time::SystemTime;
 
 use crate::*;
@@ -15,11 +16,16 @@ pub trait Methods<T> {
     fn get_metadata(&self, key: &Key) -> Result<T>;
 }
 
+impl Song {
+    pub fn serialize(&self) -> Result<AlignedVec> {
+        Ok(rkyv::to_bytes::<Song, 1024>(self)?)
+    }
+}
+
 impl Methods<Song> for sled::Db {
     fn insert_metadata(&self, song: &Song) -> Result<Key> {
         let key = song.hash_key();
-        let bytes = rkyv::to_bytes::<Song, 1024>(song)?;
-        self.insert(&key, bytes.as_slice())?;
+        self.insert(&key, song)?;
         Ok(key)
     }
 
@@ -32,16 +38,48 @@ impl Methods<Song> for sled::Db {
 #[derive_data_model]
 pub struct StoredAlbum {
     tags: AlbumTags,
-    song_keys: Vec<ByteKey>,
+    pub song_keys: Vec<(Option<u16>, ByteKey)>, // TODO Maybe Benchmark, but albums are small so maintaining sort this way seems best.
 }
 
-fn retrieve_album(tree: &sled::Db, stored_album: &ArchivedStoredAlbum) -> Result<Album> {
+impl From<StoredAlbum> for IVec {
+    fn from(album: StoredAlbum) -> Self {
+        sled::IVec::from(album.serialize().unwrap().as_ref())
+    }
+}
+
+impl From<&Song> for IVec {
+    fn from(song: &Song) -> Self {
+        sled::IVec::from(song.serialize().unwrap().as_ref())
+    }
+}
+
+impl StoredAlbum {
+    pub fn new(tags: &AlbumTags, first_track: (Option<u16>, ByteKey)) -> Self {
+        Self {
+            tags: tags.clone(),
+            song_keys: vec![first_track],
+        }
+    }
+
+    pub fn partial_deserialize_album(bytes: &[u8]) -> Result<StoredAlbum> {
+        let aligned = &bytes.to_vec();
+        Ok(unsafe { rkyv::from_bytes_unchecked(aligned)? })
+    }
+
+    pub fn serialize(&self) -> Result<AlignedVec> {
+        Ok(rkyv::to_bytes::<StoredAlbum, 1024>(self)?)
+    }
+}
+
+fn deserialize_album(tree: &sled::Db, bytes: &[u8]) -> Result<Album> {
+    let aligned = &bytes.to_vec();
+    let stored_album = unsafe { rkyv::archived_root::<StoredAlbum>(aligned) };
     Ok(Album {
         tags: stored_album.tags.deserialize(&mut rkyv::Infallible)?,
         songs: stored_album
             .song_keys
             .iter()
-            .map(|byte_key: &ByteKey| tree.get_metadata(byte_key.as_ref()))
+            .map(|(_, byte_key)| tree.get_metadata(byte_key.as_ref()))
             .collect::<Result<Vec<Song>>>()?,
     })
 }
@@ -55,19 +93,19 @@ impl Methods<Album> for sled::Db {
             song_keys: album
                 .songs
                 .iter()
-                .map(|song| self.insert_metadata(song).map(|key| *key.as_ref()))
-                .collect::<Result<Vec<ByteKey>>>()?,
+                .map(|song| {
+                    self.insert_metadata(song)
+                        .map(|key| (song.tags.track_number, key.to_byte_key()))
+                })
+                .collect::<Result<Vec<(Option<u16>, ByteKey)>>>()?,
         };
-        let bytes = rkyv::to_bytes::<StoredAlbum, 1024>(&stored_album)?;
-        self.insert(&key, bytes.as_slice())?;
+        self.insert(&key, stored_album)?;
         Ok(key)
     }
 
     fn get_metadata(&self, key: &Key) -> Result<Album> {
         let bytes = self.get(key)?.ok_or("Could not find album key in db")?;
-        let aligned = &bytes.to_vec();
-        let stored_album = unsafe { rkyv::archived_root::<StoredAlbum>(aligned) };
-        retrieve_album(self, stored_album)
+        deserialize_album(self, bytes.as_ref())
     }
 }
 
@@ -84,11 +122,7 @@ impl Helpers for sled::Db {
         self.scan_prefix(KeyType::Album).map(|album_tag| {
             album_tag
                 .map_err(|e| e.into())
-                .and_then(|(_, bytes)| unsafe {
-                    let aligned = &bytes.to_vec();
-                    let stored_album = rkyv::archived_root::<StoredAlbum>(aligned);
-                    retrieve_album(self, stored_album)
-                })
+                .and_then(|(_, bytes)| deserialize_album(self, bytes.as_ref()))
         })
     }
 

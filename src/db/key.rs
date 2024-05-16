@@ -26,9 +26,13 @@ pub struct Key {
 
 pub type ByteKey = [u8; mem::size_of::<Key>()];
 
-impl AsRef<ByteKey> for Key {
-    fn as_ref(&self) -> &ByteKey {
-        unsafe { &*(self as *const Self as *const ByteKey) }
+impl Key {
+    pub fn to_byte_key(self) -> ByteKey {
+        unsafe { std::mem::transmute(self) }
+    }
+
+    pub fn from_byte_key(byte_key: &ByteKey) -> &Key {
+        unsafe { std::mem::transmute(byte_key) }
     }
 }
 
