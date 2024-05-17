@@ -27,7 +27,7 @@ pub struct Key {
 pub type ByteKey = [u8; mem::size_of::<Key>()];
 
 impl Key {
-    pub fn to_byte_key(self) -> ByteKey {
+    pub fn to_byte_key(&self) -> &ByteKey {
         unsafe { std::mem::transmute(self) }
     }
 

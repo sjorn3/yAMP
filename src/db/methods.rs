@@ -95,7 +95,7 @@ impl Methods<Album> for sled::Db {
                 .iter()
                 .map(|song| {
                     self.insert_metadata(song)
-                        .map(|key| (song.tags.track_number, key.to_byte_key()))
+                        .map(|key| (song.tags.track_number, *key.to_byte_key()))
                 })
                 .collect::<Result<Vec<(Option<u16>, ByteKey)>>>()?,
         };

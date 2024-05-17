@@ -116,12 +116,53 @@ fn test_album_upsert() -> Result {
 
     for (_, song) in unordered_songs {
         let song_key = tree.insert_metadata(song)?;
-        album_upsert(&tree, &album_tags, song, song_key)?;
+        album_upsert(&tree, &album_tags, song, &song_key)?;
     }
 
     let restored_album: Album = tree.get_metadata(&album_tags.hash_key())?;
     for (i, song) in songs.iter().enumerate() {
         assert_eq!(restored_album.songs[i], *song);
     }
+    Ok(())
+}
+
+#[test]
+fn test_remove_song_from_album() -> Result {
+    let dir = TempDir::new()?;
+    let tree = sled::open(dir.path())?;
+    let album_tags = AlbumTags::arbitrary();
+    let album_key = album_tags.hash_key();
+    let songs: Vec<Song> = (0..10).map(|_| Song::arbitrary()).collect();
+
+    let song_keys: Vec<Key> = songs
+        .iter()
+        .map(|song| {
+            let key = tree.insert_metadata(song)?;
+            album_upsert(&tree, &album_tags, song, &key)?;
+            Ok(key)
+        })
+        .collect::<music_cache::Result<Vec<Key>>>()?;
+
+    assert!(tree.get(&album_key)?.is_some());
+
+    let mut shuffled: Vec<(&Key, &Song)> = song_keys.iter().zip(songs.iter()).collect();
+    let mut rng = thread_rng();
+    shuffled.shuffle(&mut rng);
+
+    for (key, song) in shuffled {
+        let album: Album = tree.get_metadata(&album_key)?;
+        assert!(album.songs.contains(song));
+
+        remove_song_from_album(&tree, &album_tags, key)?;
+
+        let result_album: music_cache::Result<Album> = tree.get_metadata(&album_key);
+        if let Ok(album) = result_album {
+            assert!(!album.songs.contains(song))
+        };
+        assert!(tree.get(key)?.is_some());
+    }
+
+    assert!(tree.get(album_key)?.is_none());
+
     Ok(())
 }

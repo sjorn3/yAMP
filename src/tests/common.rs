@@ -1,5 +1,5 @@
 use fake::{
-    faker::{filesystem::en::FilePath, lorem::en::Sentence, name::en::Name},
+    faker::{lorem::en::Sentence, name::en::Name},
     *,
 };
 
@@ -24,7 +24,7 @@ impl Arbitrary for Song {
     fn arbitrary() -> Self {
         Self {
             tags: SongTags::arbitrary(),
-            relpath: FilePath().fake::<String>().into_bytes(),
+            relpath: (0..16).map(|_| Faker.fake::<u8>()).collect(),
         }
     }
 }

@@ -40,7 +40,7 @@ fn add_song_to_album(bytes: &[u8], song: &Song, song_key: ByteKey) -> Result<Sto
     Ok(album)
 }
 
-fn remove_song_from_album(bytes: &[u8], song_key: ByteKey) -> Result<Option<StoredAlbum>> {
+fn find_remove_song_from_album(bytes: &[u8], song_key: ByteKey) -> Result<Option<StoredAlbum>> {
     let mut album = StoredAlbum::partial_deserialize_album(bytes)?;
     if album.song_keys.len() == 1 {
         return Ok(None);
@@ -49,15 +49,27 @@ fn remove_song_from_album(bytes: &[u8], song_key: ByteKey) -> Result<Option<Stor
     Ok(Some(album))
 }
 
+pub fn remove_song_from_album(
+    tree: &sled::Db,
+    album_tags: &AlbumTags,
+    song_key: &Key,
+) -> Result<()> {
+    let album_key = album_tags.hash_key();
+    let byte_key = *song_key.to_byte_key();
+    tree.update_and_fetch(album_key, |maybe_bytes| {
+        maybe_bytes.and_then(|bytes| find_remove_song_from_album(bytes, byte_key).unwrap())
+    })?;
+    Ok(())
+}
+
 pub fn album_upsert(
     tree: &sled::Db,
     album_tags: &AlbumTags,
     song: &Song,
-    song_key: Key,
+    song_key: &Key,
 ) -> Result<()> {
     let album_key = album_tags.hash_key();
-    let byte_key = song_key.to_byte_key();
-    // Sadly update_and_fetch doesn't preserve Result types, so unwrap and hope for the best.
+    let byte_key = *song_key.to_byte_key();
     tree.update_and_fetch(album_key, |maybe_bytes| {
         let new_album = if let Some(bytes) = maybe_bytes {
             add_song_to_album(bytes, song, byte_key).unwrap()
