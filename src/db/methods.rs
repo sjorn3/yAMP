@@ -1,5 +1,4 @@
 use music_cache_derive::derive_data_model;
-use rkyv::{AlignedVec, Deserialize};
 use sled::IVec;
 use std::time::SystemTime;
 
@@ -17,8 +16,12 @@ pub trait Methods<T> {
 }
 
 impl Song {
-    pub fn serialize(&self) -> Result<AlignedVec> {
-        Ok(rkyv::to_bytes::<Song, 1024>(self)?)
+    pub fn serialize(&self) -> Vec<u8> {
+        bitcode::encode(self)
+    }
+
+    pub fn deserialize(bytes: IVec) -> Result<Song> {
+        Ok(bitcode::decode(bytes.as_ref())?)
     }
 }
 
@@ -31,7 +34,7 @@ impl Methods<Song> for sled::Db {
 
     fn get_metadata(&self, key: &Key) -> Result<Song> {
         let bytes = self.get(key)?.ok_or("Could not find song tags key in db")?;
-        Ok(unsafe { rkyv::from_bytes_unchecked(&bytes.to_vec())? })
+        Song::deserialize(bytes)
     }
 }
 
@@ -43,13 +46,13 @@ pub struct StoredAlbum {
 
 impl From<StoredAlbum> for IVec {
     fn from(album: StoredAlbum) -> Self {
-        sled::IVec::from(album.serialize().unwrap().as_ref())
+        album.serialize().into()
     }
 }
 
 impl From<&Song> for IVec {
     fn from(song: &Song) -> Self {
-        sled::IVec::from(song.serialize().unwrap().as_ref())
+        song.serialize().into()
     }
 }
 
@@ -62,20 +65,18 @@ impl StoredAlbum {
     }
 
     pub fn partial_deserialize_album(bytes: &[u8]) -> Result<StoredAlbum> {
-        let aligned = &bytes.to_vec();
-        Ok(unsafe { rkyv::from_bytes_unchecked(aligned)? })
+        Ok(bitcode::decode(bytes)?)
     }
 
-    pub fn serialize(&self) -> Result<AlignedVec> {
-        Ok(rkyv::to_bytes::<StoredAlbum, 1024>(self)?)
+    pub fn serialize(&self) -> Vec<u8> {
+        bitcode::encode(self)
     }
 }
 
 fn deserialize_album(tree: &sled::Db, bytes: &[u8]) -> Result<Album> {
-    let aligned = &bytes.to_vec();
-    let stored_album = unsafe { rkyv::archived_root::<StoredAlbum>(aligned) };
+    let stored_album = StoredAlbum::partial_deserialize_album(bytes)?;
     Ok(Album {
-        tags: stored_album.tags.deserialize(&mut rkyv::Infallible)?,
+        tags: stored_album.tags,
         songs: stored_album
             .song_keys
             .iter()
@@ -128,18 +129,15 @@ impl Helpers for sled::Db {
 
     fn scan_songs(&self) -> impl Iterator<Item = Result<Song>> {
         self.scan_prefix(KeyType::Song).map(|bytes| {
-            bytes.map_err(|e| e.into()).and_then(|(_, value)| unsafe {
-                rkyv::from_bytes_unchecked::<Song>(&value.to_vec()).map_err(|e| e.into())
-            })
+            bytes
+                .map_err(|e| e.into())
+                .and_then(|(_, bytes)| Song::deserialize(bytes))
         })
     }
 
     fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>> {
         let key = song_hash_key(relpath);
-        Ok(Box::new(move || {
-            let bytes = self.get(key)?.ok_or("Could not find song tags key in db")?;
-            Ok(unsafe { rkyv::from_bytes_unchecked(&bytes.to_vec())? })
-        }))
+        Ok(Box::new(move || self.get_metadata(&key)))
     }
 
     fn set_last_scan_time(&self) -> Result<()> {

@@ -74,7 +74,7 @@ fn process_file(tree: &sled::Db, path: &Path, last_scan_time: &SystemTime) -> Re
 
         process_tags(tree, path, path_bytes, &song_key)
             .unwrap()
-            .map(|song| song.serialize().unwrap().into_boxed_slice())
+            .map(|song| song.serialize().into_boxed_slice())
     })?;
     Ok(())
 }

@@ -22,6 +22,10 @@ pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
         )]
     });
 
+    input.attrs.push(syn::parse_quote! {
+        #[derive(bitcode::Encode, bitcode::Decode)]
+    });
+
     TokenStream::from(quote! { #input })
 }
 

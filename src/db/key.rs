@@ -3,9 +3,8 @@ use std::{
     mem,
 };
 
-use music_cache_derive::{derive_data_model, taggable};
-
 use crate::{Album, AlbumTags, Result, Song};
+use music_cache_derive::{derive_data_model, taggable};
 
 #[repr(u8)]
 #[taggable(Song, Album, AlbumTags)]
