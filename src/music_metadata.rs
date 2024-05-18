@@ -8,6 +8,15 @@ pub struct Song {
     pub relpath: Vec<u8>,
 }
 
+impl Song {
+    pub fn new(tags: SongTags, relpath: &[u8]) -> Song {
+        Song {
+            tags,
+            relpath: Vec::from(relpath),
+        }
+    }
+}
+
 #[derive_data_model]
 pub struct SongTags {
     pub title: Option<String>,
@@ -27,7 +36,7 @@ pub struct AlbumTags {
     pub year: Option<u16>,
 }
 
-type AudioTag = Box<dyn audiotags::AudioTag + Send + Sync>;
+pub type AudioTag = Box<dyn audiotags::AudioTag + Send + Sync>;
 
 impl AlbumTags {
     pub fn read(tag: &AudioTag) -> AlbumTags {

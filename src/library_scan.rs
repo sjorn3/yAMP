@@ -1,7 +1,11 @@
+use audiotags::Error::UnknownFileExtension;
+use audiotags::Tag;
 use jwalk::WalkDir;
-use std::path::Path;
+use std::{path::Path, time::SystemTime};
 
-use crate::{AlbumTags, ByteKey, HashKeyGen, Key, Result, Song, StoredAlbum};
+use crate::{
+    song_hash_key, AlbumTags, ByteKey, HashKeyGen, Key, Result, Song, SongTags, StoredAlbum,
+};
 
 // Algorithm
 // 1. Walk the directory
@@ -16,17 +20,64 @@ use crate::{AlbumTags, ByteKey, HashKeyGen, Key, Result, Song, StoredAlbum};
 //    4. Elsewise, if the file does exist in the db and the modification time is not newer, do nothing.
 // 4. Once complete for all files, update global last scan time. As such, if a panic occurs during the scan, it will restart on the next run. Progress will be saved although work will be repeated anyway.
 
-// Album upsert algorithm
-// 1. lookup album_tags.hash_key()
-// 2. If it exists add the song to the album. (potentially albums should have their song keys as a Btreemap so I can insert songs with their track number and get them back in order, also it would help if album tags reverse pointed to the album to save lookup time.)
-// 3. If it does not exist, insert a new album, with this song as the only song, and create a new album tags object.
+// full_update will typically just be checking when the file has been modified and perform various functions if so, but it can also be set true for all files to force a full library reset.
+// This would be neater if both songs and albums had a pointer to their album tags. However,
 
-// Every stage above that involving writes should lock the relevant keys for safety, but I believe that sled will do that already if I use the right methods at each stage.
+// At this point, we've check the song metadata and established whether or not the album should be updated.
+// We also will already know the new key and have the album upsert alg, so this is literally just
+// inserting song tags and performing album upsert. As such not sure this is even that helpful.
+// fn handle_song_path(song_path: &Path, update: bool, tags: AudioTags) {}
 
-// A big simplification of this process would be to load everything into memory during the walk and tag finding and then operate on that, performing the searches e.t.c in a big in memory data structure.
-// This would potentially be faster but in general songs that are in the same album should be processed at a similar time if the folder structure is at all sensible, so we should be "lucky" with cache hits more often.
-// Further, writing to disk is going to be a big bottleneck so the earlier it can be started the better.
-// Also, if we imagine the UI is running in a seperate thread, it could potentially start showing music whilst it's being found, which could be kind of neat.
+// modification_date = get the file modification date
+// maybe_song_tags = get the hash key for the file path and maybe fetch from the db
+// if None or (Some(song_tags) and modification_date > global last scan date) -> maybe calculate audio tags -> if it's a valid song insert tags and perform album upsert
+// else do Nothing.
+// There's a somewhat subtle question here in that we could calculate the audio tags inside a update_and_fetch transaction and save doing a second lookup.
+// Since there can only ever be one of each file, this won't lock anything, and really behaviour will be exactly the same but we won't be able to report errors.
+// should probably check if rust has something like a try catch to catch panics in a higher scope.
+// Should absolutely prioritize the "Nothing" state and make that as fast as possible - this will be what you're doing most of the time. Therefore it's worth trying to do no IO or more than one lookup in this case.
+
+fn process_tags(
+    tree: &sled::Db,
+    path: &Path,
+    relpath: &[u8],
+    song_key: &Key,
+) -> Result<Option<Song>> {
+    let tags = Tag::new().read_from_path(path);
+    if let Err(UnknownFileExtension(_)) = tags {
+        return Ok(None);
+    };
+    let audio_tags = tags?;
+    let song_tags = SongTags::read(&audio_tags);
+    let album_tags = AlbumTags::read(&audio_tags);
+    let song = Song::new(song_tags, relpath);
+    album_upsert(tree, &album_tags, &song, song_key)?;
+    Ok(Some(song))
+}
+
+// This performs an update_and_fetch inside an update_and_fetch.
+// This is dangerous because sled will call update repeatedly if the underlying value changes whilst running.
+// However, it's theoretically not possible because only one song is ever accessed at a time.
+// It is possible to write to the same album key simultaneously but album update doesn't alter any state.
+// At some point I should benchmark if the decision to do it in this absurd way is worth it over a more sensible transaction.
+// For now I'm assuming it is because it lives in a very hot path of the load logic and it halves the number of lookups.
+fn process_file(tree: &sled::Db, path: &Path, last_scan_time: &SystemTime) -> Result<()> {
+    let path_bytes = path.as_os_str().as_encoded_bytes();
+    let song_key = song_hash_key(path_bytes);
+
+    tree.update_and_fetch(&song_key, |maybe_bytes| {
+        if maybe_bytes.is_some()
+            && path.metadata().and_then(|m| m.modified()).unwrap() < *last_scan_time
+        {
+            return maybe_bytes.map(|bytes| bytes.into());
+        }
+
+        process_tags(tree, path, path_bytes, &song_key)
+            .unwrap()
+            .map(|song| song.serialize().unwrap().into_boxed_slice())
+    })?;
+    Ok(())
+}
 
 fn add_song_to_album(bytes: &[u8], song: &Song, song_key: ByteKey) -> Result<StoredAlbum> {
     let mut album = StoredAlbum::partial_deserialize_album(bytes)?;
@@ -88,7 +139,7 @@ pub fn walk(dir: &Path) {
             dir_entry_result
                 .as_ref()
                 .map(|dir_entry: &jwalk::DirEntry<((), ())>| {
-                    // dir_entry.i
+                    // dir_entry.metadata().modified
                     dir_entry.file_type.is_file()
                         && dir_entry
                             .file_name
