@@ -1,10 +1,16 @@
-use audiotags::Error::UnknownFileExtension;
+use crate::methods::scan_stored_albums;
 use audiotags::Tag;
 use jwalk::WalkDir;
-use std::{path::Path, time::SystemTime};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use crate::{
-    song_hash_key, AlbumTags, ByteKey, HashKeyGen, Key, Result, Song, SongTags, StoredAlbum,
+    song_hash_key, AlbumTags, ByteKey, HashKeyGen, Helpers, Key, Result, Song, SongTags,
+    StoredAlbum,
 };
 
 // Algorithm
@@ -44,7 +50,7 @@ fn process_tags(
     song_key: &Key,
 ) -> Result<Option<Song>> {
     let tags = Tag::new().read_from_path(path);
-    if let Err(UnknownFileExtension(_)) = tags {
+    if tags.is_err() {
         return Ok(None);
     };
     let audio_tags = tags?;
@@ -61,9 +67,20 @@ fn process_tags(
 // It is possible to write to the same album key simultaneously but album update doesn't alter any state.
 // At some point I should benchmark if the decision to do it in this absurd way is worth it over a more sensible transaction.
 // For now I'm assuming it is because it lives in a very hot path of the load logic and it halves the number of lookups.
-fn process_file(tree: &sled::Db, path: &Path, last_scan_time: &SystemTime) -> Result<()> {
+fn process_file(
+    tree: &sled::Db,
+    path: &Path,
+    last_scan_time: &SystemTime,
+    song_keys: &Arc<Mutex<HashMap<Key, Key>>>,
+) -> Result<()> {
     let path_bytes = path.as_os_str().as_encoded_bytes();
     let song_key = song_hash_key(path_bytes);
+
+    {
+        // TODO unwrap here. I don't like this whole thing, want to use a proper threadsafe hashmap or trie.
+        let mut guard = song_keys.lock().unwrap();
+        guard.remove(&song_key);
+    }
 
     tree.update_and_fetch(&song_key, |maybe_bytes| {
         if maybe_bytes.is_some()
@@ -72,9 +89,11 @@ fn process_file(tree: &sled::Db, path: &Path, last_scan_time: &SystemTime) -> Re
             return maybe_bytes.map(|bytes| bytes.into());
         }
 
-        process_tags(tree, path, path_bytes, &song_key)
+        let res = process_tags(tree, path, path_bytes, &song_key)
             .unwrap()
-            .map(|song| song.serialize().into_boxed_slice())
+            .map(|song| song.serialize().into_boxed_slice());
+
+        res
     })?;
     Ok(())
 }
@@ -100,16 +119,17 @@ fn find_remove_song_from_album(bytes: &[u8], song_key: ByteKey) -> Result<Option
     Ok(Some(album))
 }
 
-pub fn remove_song_from_album(
-    tree: &sled::Db,
-    album_tags: &AlbumTags,
-    song_key: &Key,
-) -> Result<()> {
-    let album_key = album_tags.hash_key();
+pub fn remove_song_from_album(tree: &sled::Db, album_key: &Key, song_key: &Key) -> Result<()> {
     let byte_key = *song_key.to_byte_key();
     tree.update_and_fetch(album_key, |maybe_bytes| {
         maybe_bytes.and_then(|bytes| find_remove_song_from_album(bytes, byte_key).unwrap())
     })?;
+    Ok(())
+}
+
+pub fn remove_song(tree: &sled::Db, album_key: &Key, song_key: &Key) -> Result<()> {
+    remove_song_from_album(tree, album_key, song_key)?;
+    tree.remove(song_key)?;
     Ok(())
 }
 
@@ -132,29 +152,28 @@ pub fn album_upsert(
     Ok(())
 }
 
-pub fn walk(dir: &Path) {
-    let mut count = 0;
-    let walk_dir = WalkDir::new(dir).process_read_dir(|_, _, _, children| {
-        children.retain(|dir_entry_result| {
-            dir_entry_result
-                .as_ref()
-                .map(|dir_entry: &jwalk::DirEntry<((), ())>| {
-                    // dir_entry.metadata().modified
-                    dir_entry.file_type.is_file()
-                        && dir_entry
-                            .file_name
-                            .to_str()
-                            .map(|s| s.ends_with(".mp3"))
-                            .unwrap_or(false)
-                })
-                .unwrap_or(false)
-        });
-    });
+pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
+    let last_scan_time = Arc::new(tree.get_last_scan_time()?);
 
-    for entry in walk_dir {
-        let entry = entry.unwrap();
-        count += 1;
-        println!("{}", entry.path().display());
+    // TODO I don't like this but don't worry about it too much until you can start profiling. The problem is that it's blocking everything at startup and it's extremely non trivial
+    let song_keys = Arc::new(Mutex::new(scan_stored_albums(&tree)?));
+    let final_tree = Arc::clone(&tree);
+    let final_song_keys = Arc::clone(&song_keys);
+
+    for _ in WalkDir::new(dir).process_read_dir(move |_, _, _, children| {
+        let tree = Arc::clone(&tree);
+        let last_scan_time = Arc::clone(&last_scan_time);
+        let song_keys = Arc::clone(&song_keys);
+        for dir_entry_result in children {
+            let dir_entry = dir_entry_result.as_ref().unwrap();
+            if dir_entry.file_type.is_file() {
+                process_file(&tree, &dir_entry.path(), &last_scan_time, &song_keys).unwrap();
+            }
+        }
+    }) {}
+
+    for (album_key, song_key) in final_song_keys.lock().unwrap().iter() {
+        remove_song(&final_tree, album_key, song_key)?;
     }
-    println!("Count: {}", count);
+    Ok(())
 }

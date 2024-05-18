@@ -5,6 +5,7 @@ use std::{
 
 use crate::{Album, AlbumTags, Result, Song};
 use music_cache_derive::{derive_data_model, taggable};
+use sled::IVec;
 
 #[repr(u8)]
 #[taggable(Song, Album, AlbumTags)]
@@ -22,6 +23,26 @@ pub struct Key {
     _id: u64,
 }
 
+impl Clone for Key {
+    fn clone(&self) -> Self {
+        Key::from_byte_key_owned(*self.to_byte_key())
+    }
+}
+
+impl PartialEq for Key {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_byte_key() == other.to_byte_key()
+    }
+}
+
+impl std::hash::Hash for Key {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_byte_key().hash(state);
+    }
+}
+
+impl Eq for Key {}
+
 pub type ByteKey = [u8; mem::size_of::<Key>()];
 
 impl Key {
@@ -32,11 +53,22 @@ impl Key {
     pub fn from_byte_key(byte_key: &ByteKey) -> &Key {
         unsafe { std::mem::transmute(byte_key) }
     }
+
+    pub fn from_byte_key_owned(byte_key: ByteKey) -> Key {
+        unsafe { std::mem::transmute(byte_key) }
+    }
 }
 
 impl AsRef<Key> for ByteKey {
     fn as_ref(&self) -> &Key {
         unsafe { &*(self as *const Self as *const Key) }
+    }
+}
+
+impl From<&IVec> for &Key {
+    fn from(vec: &IVec) -> Self {
+        let bytes = vec.as_ref();
+        unsafe { &*(bytes.as_ptr() as *const Key) }
     }
 }
 

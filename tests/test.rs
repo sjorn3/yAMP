@@ -1,8 +1,8 @@
-use fake::{Fake, Faker};
 use music_cache::{
     tests::{common::Result, Arbitrary},
     *,
 };
+use std::{path::Path, sync::Arc};
 use tempfile::*;
 
 mod fs_utils;
@@ -10,13 +10,83 @@ use fs_utils::SkeletonFileTree;
 
 use rand::prelude::*;
 
+#[ignore]
+#[allow(dead_code)]
+fn test_my_library() -> Result {
+    let db_dir = tempdir()?;
+    let tree = Arc::new(sled::open(db_dir.path())?);
+    let dir = Path::new(r"librarypath");
+
+    scan_library(Arc::clone(&tree), dir)?;
+
+    let albums = tree
+        .scan_albums()
+        .collect::<music_cache::Result<Vec<Album>>>()?;
+
+    for album in albums.iter() {
+        println!(
+            "{} by {} - {}",
+            album.tags.title.clone().unwrap(),
+            album.tags.artist.clone().unwrap_or("Unknown".to_string()),
+            album.tags.year.unwrap_or(0),
+        );
+        let tags: Vec<String> = album
+            .songs
+            .iter()
+            .map(|song| song.tags.title.clone().unwrap())
+            .collect();
+        println!("Songs: {:#?}", tags);
+    }
+
+    let songs = tree
+        .scan_songs()
+        .collect::<music_cache::Result<Vec<Song>>>()?;
+
+    println!("Total Songs: {:?}", songs.len());
+
+    Ok(())
+}
+
 #[test]
 fn test_gen_file_tree() -> Result {
     // TODO we should add some junk files inside here too.
     // And potentially images since album art is sometimes in the dir.
     let dir = tempdir()?;
-    let tree: SkeletonFileTree = Faker.fake();
-    tree.generate_file_structure(dir.path())?;
+
+    let tree: SkeletonFileTree = SkeletonFileTree {
+        dirs: vec![
+            SkeletonFileTree {
+                dirs: vec![SkeletonFileTree {
+                    dirs: vec![],
+                    files: 10,
+                }],
+                files: 0,
+            },
+            SkeletonFileTree {
+                dirs: vec![SkeletonFileTree {
+                    dirs: vec![],
+                    files: 10,
+                }],
+                files: 10,
+            },
+        ],
+        files: 0,
+    };
+    let all_tags = tree.generate_file_structure(dir.path())?;
+
+    let db_dir = tempdir()?;
+    let tree = Arc::new(sled::open(db_dir.path())?);
+
+    scan_library(Arc::clone(&tree), dir.path())?;
+
+    for (album_tags, song) in all_tags {
+        let restored_song = tree.get_song_from_path(&song.relpath)?()?;
+        assert!(restored_song.tags == song.tags);
+        let restored_album: Album = tree.get_metadata(&album_tags.hash_key())?;
+        assert!(restored_album.songs.contains(&restored_song));
+        assert!(restored_album.tags == album_tags);
+    }
+
     Ok(())
 }
 
@@ -74,15 +144,6 @@ fn test_db_scan_albums() -> Result {
     for restored_album in tree.scan_albums() {
         assert_eq!(restored_album?, album);
     }
-    Ok(())
-}
-
-#[test]
-fn test_walk_dir() -> Result {
-    let dir = tempdir()?;
-    let tree: SkeletonFileTree = Faker.fake();
-    tree.generate_file_structure(dir.path())?;
-    music_cache::walk(dir.path());
     Ok(())
 }
 
@@ -153,7 +214,7 @@ fn test_remove_song_from_album() -> Result {
         let album: Album = tree.get_metadata(&album_key)?;
         assert!(album.songs.contains(song));
 
-        remove_song_from_album(&tree, &album_tags, key)?;
+        remove_song_from_album(&tree, &album_key, key)?;
 
         let result_album: music_cache::Result<Album> = tree.get_metadata(&album_key);
         if let Ok(album) = result_album {

@@ -3,6 +3,7 @@ use std::path::Path;
 
 #[derive_data_model]
 #[cfg_attr(any(test, feature = "integration-tests"), derive(Clone))]
+#[derive(Hash)]
 pub struct Song {
     pub tags: SongTags,
     // converting a path to a utf8 string might not be valid and there's no Archive instance for PathBuf so just store it as bytes.
@@ -20,6 +21,7 @@ impl Song {
 
 #[derive_data_model]
 #[cfg_attr(any(test, feature = "integration-tests"), derive(Clone))]
+#[derive(Hash)]
 pub struct SongTags {
     pub title: Option<String>,
     pub track_number: Option<u16>,

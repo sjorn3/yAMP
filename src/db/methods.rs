@@ -1,6 +1,9 @@
 use music_cache_derive::derive_data_model;
 use sled::IVec;
-use std::time::SystemTime;
+use std::{
+    collections::{HashMap, HashSet},
+    time::SystemTime,
+};
 
 use crate::*;
 
@@ -110,12 +113,39 @@ impl Methods<Album> for sled::Db {
     }
 }
 
+// TODO The error handling in this is leading to lots of vec being created. If this is too slow
+// I could call unwrap inside each one. This is fine for now.
+pub fn scan_stored_albums(tree: &sled::Db) -> Result<HashMap<Key, Key>> {
+    Ok(tree
+        .scan_prefix(KeyType::Album)
+        .collect::<std::result::Result<Vec<(IVec, IVec)>, sled::Error>>()?
+        .iter()
+        .map(|(album_key, bytes)| {
+            StoredAlbum::partial_deserialize_album(bytes.as_ref()).map(|album| {
+                let album_key: &Key = album_key.into();
+                (album_key.clone(), album)
+            })
+        })
+        .collect::<Result<Vec<(Key, StoredAlbum)>>>()?
+        .iter()
+        .flat_map(|(album_key, album)| {
+            Box::new(
+                album
+                    .song_keys
+                    .iter()
+                    .map(|(_, song_key)| (album_key.clone(), Key::from_byte_key(song_key).clone())),
+            )
+        })
+        .collect::<HashMap<Key, Key>>())
+}
+
 pub trait Helpers {
     fn scan_albums(&self) -> impl Iterator<Item = Result<Album>>;
     fn scan_songs(&self) -> impl Iterator<Item = Result<Song>>;
     fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>>;
     fn set_last_scan_time(&self) -> Result<()>;
     fn get_last_scan_time(&self) -> Result<SystemTime>;
+    fn scan_album_song_keys(&self) -> Result<HashSet<(Key, Key)>>;
 }
 
 impl Helpers for sled::Db {
@@ -135,6 +165,12 @@ impl Helpers for sled::Db {
         })
     }
 
+    // get all album_key, song_key pairs in a hash set
+    fn scan_album_song_keys(&self) -> Result<HashSet<(Key, Key)>> {
+        // scan_stored_albums(&self).collect()
+        unimplemented!()
+    }
+
     fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>> {
         let key = song_hash_key(relpath);
         Ok(Box::new(move || self.get_metadata(&key)))
@@ -150,8 +186,18 @@ impl Helpers for sled::Db {
 
     fn get_last_scan_time(&self) -> Result<SystemTime> {
         let bytes = self
-            .get(KeyType::LastScanTime)?
-            .ok_or("Could not find last scan time in db")?
+            .update_and_fetch(KeyType::LastScanTime, |maybe_bytes| match maybe_bytes {
+                Some(bytes) => Some(bytes.into()),
+                None => Some(
+                    (unsafe {
+                        std::mem::transmute::<SystemTime, [u8; std::mem::size_of::<SystemTime>()]>(
+                            SystemTime::UNIX_EPOCH,
+                        )
+                    })
+                    .to_vec(),
+                ),
+            })?
+            .ok_or("Impossible; Could not find last scan time in db")?
             .to_vec();
         Ok(unsafe { *(bytes.as_ptr() as *const SystemTime) })
     }
