@@ -12,7 +12,7 @@ pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(item as DeriveInput);
 
     input.attrs.push(syn::parse_quote! {
-        #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+        #[derive(bitcode::Encode, bitcode::Decode)]
     });
 
     input.attrs.push(syn::parse_quote! {
@@ -20,10 +20,6 @@ pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
             feature = "integration-tests",
             derive(Debug, PartialEq, Eq)
         )]
-    });
-
-    input.attrs.push(syn::parse_quote! {
-        #[derive(bitcode::Encode, bitcode::Decode)]
     });
 
     TokenStream::from(quote! { #input })
