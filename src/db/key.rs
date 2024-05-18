@@ -4,7 +4,6 @@ use std::{
 };
 
 use music_cache_derive::{derive_data_model, taggable};
-use zerocopy::AsBytes;
 
 use crate::{Album, AlbumTags, Result, Song};
 
@@ -127,7 +126,7 @@ impl HashMaybeWrite for DefaultHasher {
 
     fn maybe_write_u16(&mut self, val: &Option<u16>) {
         if let Some(val) = val {
-            self.write(val.as_bytes());
+            self.write(val.to_ne_bytes().as_slice());
         }
     }
 }

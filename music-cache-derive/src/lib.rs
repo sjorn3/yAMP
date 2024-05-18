@@ -18,7 +18,7 @@ pub fn derive_data_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
     input.attrs.push(syn::parse_quote! {
         #[cfg_attr(
             feature = "integration-tests",
-            derive(Debug, PartialEq, Eq, Clone)
+            derive(Debug, PartialEq, Eq)
         )]
     });
 

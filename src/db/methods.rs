@@ -54,9 +54,9 @@ impl From<&Song> for IVec {
 }
 
 impl StoredAlbum {
-    pub fn new(tags: &AlbumTags, first_track: (Option<u16>, ByteKey)) -> Self {
+    pub fn new(tags: AlbumTags, first_track: (Option<u16>, ByteKey)) -> Self {
         Self {
-            tags: tags.clone(),
+            tags,
             song_keys: vec![first_track],
         }
     }

@@ -125,7 +125,7 @@ pub fn album_upsert(
         let new_album = if let Some(bytes) = maybe_bytes {
             add_song_to_album(bytes, song, byte_key).unwrap()
         } else {
-            StoredAlbum::new(album_tags, (song.tags.track_number, byte_key))
+            StoredAlbum::new(album_tags.clone(), (song.tags.track_number, byte_key))
         };
         Some(new_album)
     })?;

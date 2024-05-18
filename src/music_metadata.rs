@@ -2,6 +2,7 @@ use music_cache_derive::derive_data_model;
 use std::path::Path;
 
 #[derive_data_model]
+#[cfg_attr(any(test, feature = "integration-tests"), derive(Clone))]
 pub struct Song {
     pub tags: SongTags,
     // converting a path to a utf8 string might not be valid and there's no Archive instance for PathBuf so just store it as bytes.
@@ -18,18 +19,20 @@ impl Song {
 }
 
 #[derive_data_model]
+#[cfg_attr(any(test, feature = "integration-tests"), derive(Clone))]
 pub struct SongTags {
     pub title: Option<String>,
     pub track_number: Option<u16>,
 }
 
-#[cfg_attr(feature = "integration-tests", derive(Debug, PartialEq, Eq, Clone))]
+#[cfg_attr(feature = "integration-tests", derive(Debug, PartialEq, Eq))]
 pub struct Album {
     pub tags: AlbumTags,
     pub songs: Vec<Song>,
 }
 
 #[derive_data_model]
+#[derive(Clone)]
 pub struct AlbumTags {
     pub artist: Option<String>,
     pub title: Option<String>,
