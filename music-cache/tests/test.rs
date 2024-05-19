@@ -10,52 +10,19 @@ use fs_utils::SkeletonFileTree;
 
 use rand::prelude::*;
 
-fn print_db_stats(tree: &sled::Db) -> Result {
-    let albums = tree
-        .scan_albums()
-        .collect::<music_cache::Result<Vec<Album>>>()?;
-
-    // for album in albums.iter() {
-    //     println!(
-    //         "{} by {} - {}",
-    //         album.tags.title.clone().unwrap(),
-    //         album.tags.artist.clone().unwrap_or("Unknown".to_string()),
-    //         album.tags.year.unwrap_or(0),
-    //     );
-    //     let tags: Vec<String> = album
-    //         .songs
-    //         .iter()
-    //         .map(|song| song.tags.title.clone().unwrap())
-    //         .collect();
-    //     println!("Songs: {:#?}", tags);
-    // }
-
-    let songs = tree
-        .scan_songs()
-        .collect::<music_cache::Result<Vec<Song>>>()?;
-
-    println!("Total Albums: {:?}", albums.len());
-    println!("Total Songs: {:?}", songs.len());
-
-    Ok(())
-}
-
-#[test]
+#[ignore]
 #[allow(dead_code)]
 fn test_my_library() -> Result {
     let db_dir = tempdir()?;
-    // let db_dir = Path::new(r"C:\Users\seanr\code\cash");
-    // let dir = Path::new(r"C:\Users\seanr\code\music-mp3-v9");
-    let dir = Path::new(r"\\192.168.1.165\ssd\music");
+    let dir = Path::new(r"C:\Users\seanr\code\music-mp3-v9");
+    // let dir = Path::new(r"\\192.168.1.165\ssd\music");
 
     let time = SystemTime::now();
-    // print_db_stats(&tree)?;
     {
         let tree = Arc::new(sled::open(db_dir.path())?);
         scan_library(Arc::clone(&tree), dir)?;
         tree.flush()?;
     }
-    // print_db_stats(&tree)?;
     let inter = SystemTime::now();
     for _ in 0..10 {
         let tree = Arc::new(sled::open(db_dir.path())?);
@@ -65,7 +32,6 @@ fn test_my_library() -> Result {
     let after_time = SystemTime::now();
     println!("Cold: {:?}", inter.duration_since(time)?);
     println!("Hot: {:?}", after_time.duration_since(inter)? / 10);
-    // print_db_stats(&tree)?;
 
     Ok(())
 }
