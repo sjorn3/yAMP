@@ -13,6 +13,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cd music-cache && cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose --features integration-tests
+      run: cd music-cache && cargo test --verbose --features integration-tests
