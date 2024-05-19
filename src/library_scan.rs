@@ -1,9 +1,11 @@
 use crate::methods::scan_stored_albums;
 use audiotags::Tag;
 use jwalk::WalkDir;
+use rayon::prelude::*;
 use std::{
     collections::HashMap,
-    path::Path,
+    collections::LinkedList,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::SystemTime,
 };
@@ -12,36 +14,6 @@ use crate::{
     song_hash_key, AlbumTags, ByteKey, HashKeyGen, Helpers, Key, Result, Song, SongTags,
     StoredAlbum,
 };
-
-// Algorithm
-// 1. Walk the directory
-// 2. For each file attempt to read the tags (audiotags will early exit if it doesn't know the extension)
-//    1. Also, load all KeyType::Songs into memory in a set with quick deletion, and remove all that are found in the walk. Remove any remaining keys from the db at the end.
-// 3. If the tags are read successfully
-//    1. Check if the file path exists as a key in the db.
-//    2. If it does exist, check the modification time of the file, overwrite the songtags in the db if newer than global last scan time.
-//       If the albumtags have changed, remove the reference to this song from the album and perform an album upsert.
-//       If that was the last song in the album, remove the album and album tags object (also any album art.. other references e.t.c)
-//    3. If it does not exist, add the new song tags and perform an album upsert.
-//    4. Elsewise, if the file does exist in the db and the modification time is not newer, do nothing.
-// 4. Once complete for all files, update global last scan time. As such, if a panic occurs during the scan, it will restart on the next run. Progress will be saved although work will be repeated anyway.
-
-// full_update will typically just be checking when the file has been modified and perform various functions if so, but it can also be set true for all files to force a full library reset.
-// This would be neater if both songs and albums had a pointer to their album tags. However,
-
-// At this point, we've check the song metadata and established whether or not the album should be updated.
-// We also will already know the new key and have the album upsert alg, so this is literally just
-// inserting song tags and performing album upsert. As such not sure this is even that helpful.
-// fn handle_song_path(song_path: &Path, update: bool, tags: AudioTags) {}
-
-// modification_date = get the file modification date
-// maybe_song_tags = get the hash key for the file path and maybe fetch from the db
-// if None or (Some(song_tags) and modification_date > global last scan date) -> maybe calculate audio tags -> if it's a valid song insert tags and perform album upsert
-// else do Nothing.
-// There's a somewhat subtle question here in that we could calculate the audio tags inside a update_and_fetch transaction and save doing a second lookup.
-// Since there can only ever be one of each file, this won't lock anything, and really behaviour will be exactly the same but we won't be able to report errors.
-// should probably check if rust has something like a try catch to catch panics in a higher scope.
-// Should absolutely prioritize the "Nothing" state and make that as fast as possible - this will be what you're doing most of the time. Therefore it's worth trying to do no IO or more than one lookup in this case.
 
 fn process_tags(
     tree: &sled::Db,
@@ -68,11 +40,11 @@ fn process_tags(
 // At some point I should benchmark if the decision to do it in this absurd way is worth it over a more sensible transaction.
 // For now I'm assuming it is because it lives in a very hot path of the load logic and it halves the number of lookups.
 fn process_file(
-    tree: &sled::Db,
+    tree: Arc<sled::Db>,
     path: &Path,
     last_scan_time: &SystemTime,
     song_keys: &Arc<Mutex<HashMap<Key, Key>>>,
-) -> Result<()> {
+) -> Result<Option<(Arc<sled::Db>, std::path::PathBuf, Key)>> {
     let path_bytes = path.as_os_str().as_encoded_bytes();
     let song_key = song_hash_key(path_bytes);
 
@@ -82,17 +54,20 @@ fn process_file(
         guard.remove(&song_key);
     }
 
-    tree.update_and_fetch(&song_key, |maybe_bytes| {
-        if maybe_bytes.is_some()
-            && path.metadata().and_then(|m| m.modified()).unwrap() < *last_scan_time
-        {
-            return maybe_bytes.map(|bytes| bytes.into());
+    if tree.get(&song_key)?.is_some()
+        && path.metadata().and_then(|m| m.modified()).unwrap() < *last_scan_time
+    {
+        return Ok(None);
+    }
+
+    if let Some(ext) = path.extension() {
+        // TODO Implement resilient check function equivalent
+        if ext == "mp3" || ext == "flac" || ext == "m4a" {
+            return Ok(Some((tree, path.to_path_buf(), song_key)));
         }
-        process_tags(tree, path, path_bytes, &song_key)
-            .unwrap()
-            .map(|song| song.serialize().into_boxed_slice())
-    })?;
-    Ok(())
+    }
+
+    Ok(None)
 }
 
 fn add_song_to_album(bytes: &[u8], song: &Song, song_key: ByteKey) -> Result<StoredAlbum> {
@@ -149,6 +124,19 @@ pub fn album_upsert(
     Ok(())
 }
 
+fn apply_process_file(info: &(Arc<sled::Db>, PathBuf, Key)) -> Result<()> {
+    let (arc_tree, path, song_key) = info;
+    let path_bytes = path.as_os_str().as_encoded_bytes();
+
+    if let Some(song) = process_tags(arc_tree, path, path_bytes, song_key)? {
+        let tree = Arc::clone(arc_tree);
+        let now_ = tree.as_ref();
+        now_.insert(song_key, &song.clone())?;
+    }
+
+    Ok(())
+}
+
 pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
     let last_scan_time = Arc::new(tree.get_last_scan_time()?);
 
@@ -157,20 +145,39 @@ pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
     let final_tree = Arc::clone(&tree);
     let final_song_keys = Arc::clone(&song_keys);
 
+    let files_to_load = Arc::new(Mutex::new(LinkedList::new()));
+
+    let final_files_to_load = Arc::clone(&files_to_load);
+
     for _ in WalkDir::new(dir).process_read_dir(move |_, _, _, children| {
-        let tree = Arc::clone(&tree);
         let last_scan_time = Arc::clone(&last_scan_time);
         let song_keys = Arc::clone(&song_keys);
         for dir_entry_result in children {
             let dir_entry = dir_entry_result.as_ref().unwrap();
             if dir_entry.file_type.is_file() {
-                process_file(&tree, &dir_entry.path(), &last_scan_time, &song_keys).unwrap();
+                if let Some(file_to_load) = process_file(
+                    Arc::clone(&tree),
+                    &dir_entry.path(),
+                    &last_scan_time,
+                    &song_keys,
+                )
+                .unwrap()
+                {
+                    files_to_load.lock().unwrap().push_back(file_to_load);
+                }
             }
         }
     }) {}
 
+    let files_to_load_list = final_files_to_load.lock().unwrap();
+    files_to_load_list
+        .par_iter()
+        .for_each(|file_to_load| apply_process_file(file_to_load).unwrap());
+
     for (album_key, song_key) in final_song_keys.lock().unwrap().iter() {
         remove_song(&final_tree, album_key, song_key)?;
     }
+
+    final_tree.set_last_scan_time()?;
     Ok(())
 }

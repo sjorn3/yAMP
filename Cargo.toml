@@ -19,6 +19,7 @@ music-cache-derive = { path = "./music-cache-derive" }
 jwalk = "0.8.1"
 audiotags = "0.5.0"
 sled = "0.34.7"
+rayon = "1.10.0"
 bitcode = { version = "0", features = ["derive"], default-features = false }
 fake = { version = "2.9.2", features = ["derive"], optional = true }
 

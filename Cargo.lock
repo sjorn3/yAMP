@@ -405,6 +405,7 @@ dependencies = [
  "jwalk",
  "music-cache-derive",
  "rand",
+ "rayon",
  "sled",
  "tempfile",
 ]
