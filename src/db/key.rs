@@ -72,6 +72,13 @@ impl From<&IVec> for &Key {
     }
 }
 
+impl From<IVec> for &Key {
+    fn from(vec: IVec) -> Self {
+        let bytes = vec.as_ref();
+        unsafe { &*(bytes.as_ptr() as *const Key) }
+    }
+}
+
 impl AsRef<[u8]> for Key {
     fn as_ref(&self) -> &[u8] {
         unsafe {

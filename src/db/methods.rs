@@ -113,30 +113,26 @@ impl Methods<Album> for sled::Db {
     }
 }
 
-// TODO The error handling in this is leading to lots of vec being created. If this is too slow
-// I could call unwrap inside each one. This is fine for now.
-pub fn scan_stored_albums(tree: &sled::Db) -> Result<HashMap<Key, Key>> {
-    Ok(tree
-        .scan_prefix(KeyType::Album)
-        .collect::<std::result::Result<Vec<(IVec, IVec)>, sled::Error>>()?
-        .iter()
-        .map(|(album_key, bytes)| {
-            StoredAlbum::partial_deserialize_album(bytes.as_ref()).map(|album| {
-                let album_key: &Key = album_key.into();
-                (album_key.clone(), album)
+pub type AlbumKeyBySongKey = HashMap<Key, Key>;
+
+pub fn scan_stored_albums(tree: &sled::Db) -> Result<AlbumKeyBySongKey> {
+    tree.scan_prefix(KeyType::Album)
+        .flat_map(|e| {
+            e.map(|(album_key, bytes)| {
+                StoredAlbum::partial_deserialize_album(bytes.as_ref()).map(|album| {
+                    let album_key: &Key = album_key.into();
+                    (album_key.clone(), album)
+                })
             })
         })
-        .collect::<Result<Vec<(Key, StoredAlbum)>>>()?
-        .iter()
-        .flat_map(|(album_key, album)| {
-            Box::new(
-                album
-                    .song_keys
-                    .iter()
-                    .map(|(_, song_key)| (album_key.clone(), Key::from_byte_key(song_key).clone())),
-            )
+        .try_fold(AlbumKeyBySongKey::new(), |mut map, value| {
+            value.map(|(key, stored_album)| {
+                for (_, song_key) in stored_album.song_keys {
+                    map.insert(Key::from_byte_key_owned(song_key), key.clone());
+                }
+                map
+            })
         })
-        .collect::<HashMap<Key, Key>>())
 }
 
 pub trait Helpers {

@@ -15,12 +15,7 @@ use crate::{
     StoredAlbum,
 };
 
-fn process_tags(
-    tree: &sled::Db,
-    path: &Path,
-    relpath: &[u8],
-    song_key: &Key,
-) -> Result<Option<Song>> {
+fn process_tags(path: &Path, relpath: &[u8]) -> Result<Option<(Song, AlbumTags)>> {
     let tags = Tag::new().read_from_path(path);
     if tags.is_err() {
         return Ok(None);
@@ -29,8 +24,7 @@ fn process_tags(
     let song_tags = SongTags::read(&audio_tags);
     let album_tags = AlbumTags::read(&audio_tags);
     let song = Song::new(song_tags, relpath);
-    album_upsert(tree, &album_tags, &song, song_key)?;
-    Ok(Some(song))
+    Ok(Some((song, album_tags)))
 }
 
 // This performs an update_and_fetch inside an update_and_fetch.
@@ -40,21 +34,14 @@ fn process_tags(
 // At some point I should benchmark if the decision to do it in this absurd way is worth it over a more sensible transaction.
 // For now I'm assuming it is because it lives in a very hot path of the load logic and it halves the number of lookups.
 fn process_file(
-    tree: Arc<sled::Db>,
     path: &Path,
     last_scan_time: &SystemTime,
     song_keys: &Arc<Mutex<HashMap<Key, Key>>>,
-) -> Result<Option<(Arc<sled::Db>, std::path::PathBuf, Key)>> {
+) -> Result<Option<(PathBuf, Key)>> {
     let path_bytes = path.as_os_str().as_encoded_bytes();
     let song_key = song_hash_key(path_bytes);
 
-    {
-        // TODO unwrap here. I don't like this whole thing, want to use a proper threadsafe hashmap or trie.
-        let mut guard = song_keys.lock().unwrap();
-        guard.remove(&song_key);
-    }
-
-    if tree.get(&song_key)?.is_some()
+    if song_keys.lock().unwrap().remove(&song_key).is_some()
         && path.metadata().and_then(|m| m.modified()).unwrap() < *last_scan_time
     {
         return Ok(None);
@@ -63,7 +50,7 @@ fn process_file(
     if let Some(ext) = path.extension() {
         // TODO Implement resilient check function equivalent
         if ext == "mp3" || ext == "flac" || ext == "m4a" {
-            return Ok(Some((tree, path.to_path_buf(), song_key)));
+            return Ok(Some((path.to_path_buf(), song_key)));
         }
     }
 
@@ -124,11 +111,12 @@ pub fn album_upsert(
     Ok(())
 }
 
-fn apply_process_file(info: &(Arc<sled::Db>, PathBuf, Key)) -> Result<()> {
-    let (tree, path, song_key) = info;
+fn apply_process_file(tree: &sled::Db, info: &(PathBuf, Key)) -> Result<()> {
+    let (path, song_key) = info;
     let path_bytes = path.as_os_str().as_encoded_bytes();
 
-    if let Some(song) = process_tags(tree, path, path_bytes, song_key)? {
+    if let Some((song, album_tags)) = process_tags(path, path_bytes)? {
+        album_upsert(tree, &album_tags, &song, song_key)?;
         tree.insert(song_key, &song)?;
     }
 
@@ -138,9 +126,7 @@ fn apply_process_file(info: &(Arc<sled::Db>, PathBuf, Key)) -> Result<()> {
 pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
     let last_scan_time = Arc::new(tree.get_last_scan_time()?);
 
-    // TODO I don't like this but don't worry about it too much until you can start profiling. The problem is that it's blocking everything at startup and it's extremely non trivial
     let song_keys = Arc::new(Mutex::new(scan_stored_albums(&tree)?));
-    let final_tree = Arc::clone(&tree);
     let final_song_keys = Arc::clone(&song_keys);
 
     let files_to_load = Arc::new(Mutex::new(LinkedList::new()));
@@ -153,13 +139,8 @@ pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
         for dir_entry_result in children {
             let dir_entry = dir_entry_result.as_ref().unwrap();
             if dir_entry.file_type.is_file() {
-                if let Some(file_to_load) = process_file(
-                    Arc::clone(&tree),
-                    &dir_entry.path(),
-                    &last_scan_time,
-                    &song_keys,
-                )
-                .unwrap()
+                if let Some(file_to_load) =
+                    process_file(&dir_entry.path(), &last_scan_time, &song_keys).unwrap()
                 {
                     files_to_load.lock().unwrap().push_back(file_to_load);
                 }
@@ -170,12 +151,12 @@ pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
     let files_to_load_list = final_files_to_load.lock().unwrap();
     files_to_load_list
         .par_iter()
-        .for_each(|file_to_load| apply_process_file(file_to_load).unwrap());
+        .for_each(|file_to_load| apply_process_file(&tree, file_to_load).unwrap());
 
-    for (album_key, song_key) in final_song_keys.lock().unwrap().iter() {
-        remove_song(&final_tree, album_key, song_key)?;
+    for (song_key, album_key) in final_song_keys.lock().unwrap().iter() {
+        remove_song(&tree, album_key, song_key)?;
     }
 
-    final_tree.set_last_scan_time()?;
+    tree.set_last_scan_time()?;
     Ok(())
 }
