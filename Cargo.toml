@@ -10,7 +10,7 @@ edition = "2021"
 integration-tests = ["fake"]
 
 [profile.release]
-lto = true
+lto = "fat"
 opt-level = 3
 codegen-units = 1
 

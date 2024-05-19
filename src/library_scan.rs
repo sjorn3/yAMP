@@ -88,12 +88,9 @@ fn process_file(
         {
             return maybe_bytes.map(|bytes| bytes.into());
         }
-
-        let res = process_tags(tree, path, path_bytes, &song_key)
+        process_tags(tree, path, path_bytes, &song_key)
             .unwrap()
-            .map(|song| song.serialize().into_boxed_slice());
-
-        res
+            .map(|song| song.serialize().into_boxed_slice())
     })?;
     Ok(())
 }
