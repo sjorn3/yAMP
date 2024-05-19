@@ -125,13 +125,11 @@ pub fn album_upsert(
 }
 
 fn apply_process_file(info: &(Arc<sled::Db>, PathBuf, Key)) -> Result<()> {
-    let (arc_tree, path, song_key) = info;
+    let (tree, path, song_key) = info;
     let path_bytes = path.as_os_str().as_encoded_bytes();
 
-    if let Some(song) = process_tags(arc_tree, path, path_bytes, song_key)? {
-        let tree = Arc::clone(arc_tree);
-        let now_ = tree.as_ref();
-        now_.insert(song_key, &song.clone())?;
+    if let Some(song) = process_tags(tree, path, path_bytes, song_key)? {
+        tree.insert(song_key, &song)?;
     }
 
     Ok(())
