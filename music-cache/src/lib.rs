@@ -17,5 +17,5 @@ pub use music_metadata::*;
 pub mod library_scan;
 pub use library_scan::*;
 
-pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
+pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 pub type Lazy<'a, T> = Box<dyn FnOnce() -> Result<T> + 'a>;

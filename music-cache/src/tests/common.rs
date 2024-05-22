@@ -5,7 +5,7 @@ use fake::{
 
 use crate::*;
 
-pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
+pub type Result = std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 pub trait Arbitrary {
     fn arbitrary() -> Self;

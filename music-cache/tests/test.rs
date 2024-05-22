@@ -19,14 +19,14 @@ fn test_my_library() -> Result {
 
     let time = SystemTime::now();
     {
-        let tree = Arc::new(sled::open(db_dir.path())?);
-        scan_library(Arc::clone(&tree), dir)?;
+        let tree = sled::open(db_dir.path())?;
+        scan_library(&tree, dir)?;
         tree.flush()?;
     }
     let inter = SystemTime::now();
     for _ in 0..10 {
-        let tree = Arc::new(sled::open(db_dir.path())?);
-        scan_library(Arc::clone(&tree), dir)?;
+        let tree = sled::open(db_dir.path())?;
+        scan_library(&tree, dir)?;
         tree.flush()?;
     }
     let after_time = SystemTime::now();
@@ -66,7 +66,7 @@ fn test_gen_file_tree() -> Result {
     let db_dir = tempdir()?;
     let tree = Arc::new(sled::open(db_dir.path())?);
 
-    scan_library(Arc::clone(&tree), dir.path())?;
+    scan_library(&tree, dir.path())?;
 
     for (album_tags, song) in all_tags {
         let restored_song = tree.get_song_from_path(&song.relpath)?()?;

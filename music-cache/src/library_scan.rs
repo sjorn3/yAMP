@@ -123,10 +123,10 @@ fn apply_process_file(tree: &sled::Db, info: &(PathBuf, Key)) -> Result<()> {
     Ok(())
 }
 
-pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
+pub fn scan_library(tree: &sled::Db, dir: &Path) -> Result<()> {
     let last_scan_time = Arc::new(tree.get_last_scan_time()?);
 
-    let song_keys = Arc::new(Mutex::new(scan_stored_albums(&tree)?));
+    let song_keys = Arc::new(Mutex::new(scan_stored_albums(tree)?));
     let final_song_keys = Arc::clone(&song_keys);
 
     let files_to_load = Arc::new(Mutex::new(LinkedList::new()));
@@ -151,10 +151,10 @@ pub fn scan_library(tree: Arc<sled::Db>, dir: &Path) -> Result<()> {
     let files_to_load_list = final_files_to_load.lock().unwrap();
     files_to_load_list
         .par_iter()
-        .for_each(|file_to_load| apply_process_file(&tree, file_to_load).unwrap());
+        .for_each(|file_to_load| apply_process_file(tree, file_to_load).unwrap());
 
     for (song_key, album_key) in final_song_keys.lock().unwrap().iter() {
-        remove_song(&tree, album_key, song_key)?;
+        remove_song(tree, album_key, song_key)?;
     }
 
     tree.set_last_scan_time()?;
