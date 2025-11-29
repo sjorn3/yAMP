@@ -14,6 +14,9 @@ pub use db::*;
 pub mod music_metadata;
 pub use music_metadata::*;
 
+pub mod ffi;
+pub use ffi::*;
+
 pub mod library_scan;
 pub use library_scan::*;
 

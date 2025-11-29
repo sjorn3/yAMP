@@ -17,7 +17,7 @@ pub enum KeyType {
     LastScanTime,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Key {
     _tag: KeyType,
     _id: u64,
