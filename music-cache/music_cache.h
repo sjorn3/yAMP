@@ -8,8 +8,8 @@
 extern "C" {
 #endif
 
-// Opaque sled database handle from Rust.
-typedef struct sled_Db sled_Db;
+// Opaque database handle from Rust.
+typedef struct opaque_Db db;
 
 typedef enum KeyType {
     KeyType_Song = 0,
@@ -34,7 +34,7 @@ typedef struct AlbumTags {
 
 // Returns album tags for the provided key. Caller owns returned strings and
 // must release them with free_album_tags.
-AlbumTags album_tags_for_key(sled_Db *db, const Key *album_key);
+AlbumTags album_tags_for_key(db *db, const Key *album_key);
 
 // Releases memory allocated inside AlbumTags.
 void free_album_tags(AlbumTags *tags);

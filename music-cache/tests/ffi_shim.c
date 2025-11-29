@@ -4,7 +4,7 @@
 #include <string.h>
 
 // Returns 0 on success, otherwise an error code indicating what differed.
-int ffi_expect_album_tags(sled_Db *db, const Key *album_key, const char *artist,
+int ffi_expect_album_tags(db *db, const Key *album_key, const char *artist,
                           const char *title, uint16_t year) {
     AlbumTags tags = album_tags_for_key(db, album_key);
 
