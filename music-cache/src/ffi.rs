@@ -1,6 +1,6 @@
 use std::{ffi::CString, os::raw::c_char, ptr};
 
-use crate::{Album, AlbumTags, Key, Methods, Result};
+use crate::{AlbumTags, Key, Methods, Result};
 
 #[repr(C)]
 pub struct CAlbumTags {
@@ -44,10 +44,6 @@ impl CAlbumTags {
     }
 }
 
-/// # Safety
-/// The `db` pointer must be a valid `sled::Db` pointer, and `out_tags` must be a
-/// valid, writable pointer. The caller takes ownership of any string pointers in
-/// `out_tags` and should release them with `free_album_tags`.
 #[no_mangle]
 pub unsafe extern "C" fn album_tags_for_key(
     db: *mut sled::Db,
@@ -60,15 +56,13 @@ pub unsafe extern "C" fn album_tags_for_key(
     let key = &*album_key;
     let db_ref = &*db;
 
-    let album: Result<Album> = db_ref.get_metadata(key);
-    match album {
-        Ok(album) => album.tags.into(),
+    let album_tags: Result<AlbumTags> = db_ref.get_metadata(key);
+    match album_tags {
+        Ok(album_tags) => album_tags.into(),
         Err(_) => CAlbumTags::empty(),
     }
 }
 
-/// # Safety
-/// The caller must pass a pointer previously filled by `album_tags_for_key`.
 #[no_mangle]
 pub unsafe extern "C" fn free_album_tags(tags: *mut CAlbumTags) {
     if tags.is_null() {

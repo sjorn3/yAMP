@@ -115,6 +115,22 @@ impl Methods<Album> for sled::Db {
 
 pub type AlbumKeyBySongKey = HashMap<Key, Key>;
 
+impl Methods<AlbumTags> for sled::Db {
+    fn insert_metadata(&self, album_tags: &AlbumTags) -> Result<Key> {
+        // Not recommended to use this method.
+        let empty_album = Album {
+            tags: album_tags.clone(),
+            songs: Vec::new(),
+        };
+        self.insert_metadata(&empty_album)
+    }
+
+    fn get_metadata(&self, key: &Key) -> Result<AlbumTags> {
+        let bytes = self.get(key)?.ok_or("Could not find album key in db")?;
+        Ok(StoredAlbum::partial_deserialize_album(bytes.as_ref())?.tags)
+    }
+}
+
 pub fn scan_stored_albums(tree: &sled::Db) -> Result<AlbumKeyBySongKey> {
     tree.scan_prefix(KeyType::Album)
         .flat_map(|e| {
