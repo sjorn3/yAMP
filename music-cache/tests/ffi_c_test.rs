@@ -22,17 +22,12 @@ fn ffi_album_tags_round_trip() -> Result {
 
     let album = Album::arbitrary();
 
-    let album_key = db.insert_metadata(&album)?;
-
-    let artist_c = c_string_from_option(album.tags.artist);
-    let title_c = c_string_from_option(album.tags.title);
-
     assert!(unsafe {
         ffi_expect_album_tags(
             &db as *const _ as *mut std::ffi::c_void,
-            &album_key as *const Key,
-            artist_c,
-            title_c,
+            &db.insert_metadata(&album)? as *const Key,
+            c_string_from_option(album.tags.artist),
+            c_string_from_option(album.tags.title),
             album.tags.year.is_some(),
             album.tags.year.unwrap_or(0u16),
         )
