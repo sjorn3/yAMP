@@ -1,4 +1,8 @@
-use std::{ffi::CString, os::raw::c_char, ptr};
+use std::{
+    ffi::{CStr, CString},
+    os::raw::c_char,
+    ptr,
+};
 
 use crate::{Album, AlbumTags, Key, Methods, Result, Song, SongTags};
 
@@ -35,6 +39,36 @@ pub fn c_string_from_option<T: Into<Vec<u8>>>(value: Option<T>) -> *mut c_char {
         .and_then(|val| CString::new(val).ok())
         .map(CString::into_raw)
         .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+/// # Safety
+/// `path` is a UTF-8 string. Free with `close_db`.
+pub unsafe extern "C" fn open_db(path: *const c_char) -> *mut sled::Db {
+    if path.is_null() {
+        return ptr::null_mut();
+    }
+
+    let path = match CStr::from_ptr(path).to_str() {
+        Ok(path) => path,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    match sled::open(path) {
+        Ok(db) => Box::into_raw(Box::new(db)),
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+/// # Safety
+/// Only close handles from `open_db`.
+pub unsafe extern "C" fn close_db(db: *mut sled::Db) {
+    if db.is_null() {
+        return;
+    }
+
+    drop(Box::from_raw(db));
 }
 
 impl From<AlbumTags> for CAlbumTags {
@@ -99,6 +133,8 @@ impl From<Album> for CAlbum {
 }
 
 #[no_mangle]
+/// # Safety
+/// Free `out` with `free_album_tags`.
 pub unsafe extern "C" fn album_tags_for_key(
     db: *mut sled::Db,
     album_key: *const Key,
@@ -119,6 +155,8 @@ pub unsafe extern "C" fn album_tags_for_key(
 }
 
 #[no_mangle]
+/// # Safety
+/// Free `out` with `free_album`.
 pub unsafe extern "C" fn album_for_key(
     db: *mut sled::Db,
     album_key: *const Key,
@@ -160,6 +198,8 @@ fn free_album_tags_inner(tags: &mut CAlbumTags) {
 }
 
 #[no_mangle]
+/// # Safety
+/// Free tags produced by `album_tags_for_key`.
 pub unsafe extern "C" fn free_album_tags(tags: *mut CAlbumTags) {
     if tags.is_null() {
         return;
@@ -180,6 +220,8 @@ fn free_song(song: &mut CSong) {
 }
 
 #[no_mangle]
+/// # Safety
+/// Free albums produced by `album_for_key`.
 pub unsafe extern "C" fn free_album(album: *mut CAlbum) {
     if album.is_null() {
         return;

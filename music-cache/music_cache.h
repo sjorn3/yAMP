@@ -49,6 +49,10 @@ typedef struct Album {
     size_t song_count;
 } Album;
 
+db *open_db(const char *path);
+
+void close_db(db *db);
+
 bool album_tags_for_key(db *db, const Key *album_key, AlbumTags *out);
 
 bool album_for_key(db *db, const Key *album_key, Album *out);

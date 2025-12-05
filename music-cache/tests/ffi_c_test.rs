@@ -3,8 +3,12 @@ use music_cache::{
     tests::{common::Result, Arbitrary},
     *,
 };
+use std::{ffi::CString, ptr};
 
 extern "C" {
+    fn open_db(path: *const std::os::raw::c_char) -> *mut std::ffi::c_void;
+    fn close_db(db: *mut std::ffi::c_void);
+
     fn ffi_expect_album_tags(
         db: *mut std::ffi::c_void,
         album_key: *const Key,
@@ -13,6 +17,25 @@ extern "C" {
         expect_year: bool,
         year: u16,
     ) -> bool;
+}
+
+#[test]
+fn ffi_open_db_opens_database() -> Result {
+    let temp_dir = tempfile::tempdir()?;
+    let path = CString::new(temp_dir.path().to_str().expect("temp path is valid utf-8"))?;
+
+    let db = unsafe { open_db(path.as_ptr()) };
+    assert!(!db.is_null());
+
+    unsafe { close_db(db) };
+    
+    Ok(())
+}
+
+#[test]
+fn ffi_open_db_rejects_null_path() {
+    let db = unsafe { open_db(ptr::null()) };
+    assert!(db.is_null());
 }
 
 #[test]
