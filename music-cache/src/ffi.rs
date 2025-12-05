@@ -39,27 +39,13 @@ fn c_string_from_option<T: Into<Vec<u8>>>(value: Option<T>) -> *mut c_char {
 
 impl From<AlbumTags> for CAlbumTags {
     fn from(tags: AlbumTags) -> Self {
-        let (has_year, year) = tags
-            .year
-            .map(|year| (true, year))
-            .unwrap_or((false, 0u16));
+        let (has_year, year) = tags.year.map(|year| (true, year)).unwrap_or((false, 0u16));
 
         CAlbumTags {
             artist: c_string_from_option(tags.artist),
             title: c_string_from_option(tags.title),
             has_year,
             year,
-        }
-    }
-}
-
-impl CAlbumTags {
-    const fn empty() -> Self {
-        Self {
-            artist: ptr::null_mut(),
-            title: ptr::null_mut(),
-            has_year: false,
-            year: 0,
         }
     }
 }
@@ -112,54 +98,53 @@ impl From<Album> for CAlbum {
     }
 }
 
-impl CAlbum {
-    const fn empty() -> Self {
-        CAlbum {
-            tags: CAlbumTags::empty(),
-            songs: ptr::null_mut(),
-            song_count: 0,
-        }
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn album_tags_for_key(
     db: *mut sled::Db,
     album_key: *const Key,
-) -> CAlbumTags {
-    if db.is_null() || album_key.is_null() {
-        return CAlbumTags::empty();
+    out: *mut CAlbumTags,
+) -> bool {
+    if db.is_null() || album_key.is_null() || out.is_null() {
+        return false;
     }
 
-    let key = &*album_key;
-    let db_ref = &*db;
-
-    let album_tags: Result<AlbumTags> = db_ref.get_metadata(key);
+    let album_tags: Result<AlbumTags> = (&*db).get_metadata(&*album_key);
     match album_tags {
-        Ok(album_tags) => album_tags.into(),
-        Err(_) => CAlbumTags::empty(),
+        Ok(album_tags) => {
+            *out = album_tags.into();
+            true
+        }
+        Err(_) => false,
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn album_for_key(db: *mut sled::Db, album_key: *const Key) -> CAlbum {
-    if db.is_null() || album_key.is_null() {
-        return CAlbum::empty();
+pub unsafe extern "C" fn album_for_key(
+    db: *mut sled::Db,
+    album_key: *const Key,
+    out: *mut CAlbum,
+) -> bool {
+    if db.is_null() || album_key.is_null() || out.is_null() {
+        return false;
     }
+
+    let out_ref = &mut *out;
 
     let key = &*album_key;
     let db_ref = &*db;
 
     let album: Result<Album> = db_ref.get_metadata(key);
     match album {
-        Ok(album) => album.into(),
-        Err(_) => CAlbum::empty(),
+        Ok(album) => {
+            *out_ref = album.into();
+            true
+        }
+        Err(_) => false,
     }
 }
 
 fn free_c_string(ptr: &mut *mut c_char) {
     if !ptr.is_null() {
-        // SAFETY: The pointer was allocated by CString::into_raw in this module.
         unsafe {
             let _ = CString::from_raw(*ptr);
         }

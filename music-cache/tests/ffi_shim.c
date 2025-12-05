@@ -3,27 +3,30 @@
 #include <stdint.h>
 #include <string.h>
 
-// Returns 0 on success, otherwise an error code indicating what differed.
-int ffi_expect_album_tags(db *db, const Key *album_key, const char *artist,
+bool ffi_expect_album_tags(db *db, const Key *album_key, const char *artist,
                           const char *title, uint16_t year) {
-    AlbumTags tags = album_tags_for_key(db, album_key);
+    AlbumTags tags = {0};
 
-    int code = 0;
+    bool result = album_tags_for_key(db, album_key, &tags);
+    if (!result) {
+        return result;
+    }
 
     if (artist == NULL || tags.artist == NULL || strcmp(tags.artist, artist) != 0) {
-        code = 1;
+        result = false;
     }
     else if (title == NULL || tags.title == NULL || strcmp(tags.title, title) != 0) {
-        code = 2;
+        result = false;
     }
     else if (!tags.has_year || tags.year != year) {
-        code = 3;
+        result = false;
     }
 
     free_album_tags(&tags);
+
     if (tags.artist != NULL || tags.title != NULL) {
-        code = 4;
+        result = false;
     }
 
-    return code;
+    return result;
 }

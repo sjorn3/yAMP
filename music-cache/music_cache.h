@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,7 +18,6 @@ typedef enum KeyType {
     KeyType_LastScanTime = 2,
 } KeyType;
 
-// Matches Rust's #[repr(packed)] Key layout.
 #pragma pack(push, 1)
 typedef struct Key {
     KeyType _tag;
@@ -32,12 +32,30 @@ typedef struct AlbumTags {
     uint16_t year;
 } AlbumTags;
 
-// Returns album tags for the provided key. Caller owns returned strings and
-// must release them with free_album_tags.
-AlbumTags album_tags_for_key(db *db, const Key *album_key);
+typedef struct SongTags {
+    char *title;
+    bool has_track_number;
+    uint16_t track_number;
+} SongTags;
 
-// Releases memory allocated inside AlbumTags.
+typedef struct Song {
+    SongTags tags;
+    char *relpath;
+} Song;
+
+typedef struct Album {
+    AlbumTags tags;
+    Song *songs;
+    size_t song_count;
+} Album;
+
+bool album_tags_for_key(db *db, const Key *album_key, AlbumTags *out);
+
+bool album_for_key(db *db, const Key *album_key, Album *out);
+
 void free_album_tags(AlbumTags *tags);
+
+void free_album(Album *album);
 
 #ifdef __cplusplus
 }
