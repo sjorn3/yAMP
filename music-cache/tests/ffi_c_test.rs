@@ -1,4 +1,3 @@
-use ffi::c_string_from_option;
 use music_cache::{
     tests::{common::Result, Arbitrary},
     *,
@@ -9,13 +8,15 @@ extern "C" {
     fn ffi_open_db_round_trip(path: *const std::os::raw::c_char) -> bool;
     fn ffi_open_db_rejects_null_path() -> bool;
 
+    fn ffi_expect_album(
+        db: *mut std::ffi::c_void,
+        album_key: *const Key,
+        expected: *const ffi::CAlbum,
+    ) -> bool;
     fn ffi_expect_album_tags(
         db: *mut std::ffi::c_void,
         album_key: *const Key,
-        artist: *const std::os::raw::c_char,
-        title: *const std::os::raw::c_char,
-        expect_year: bool,
-        year: u16,
+        expected: *const ffi::CAlbumTags,
     ) -> bool;
 }
 
@@ -40,17 +41,17 @@ fn ffi_album_tags_round_trip() -> Result {
     let db = sled::open(temp_dir.path())?;
 
     let album = Album::arbitrary();
+    let mut expected: ffi::CAlbumTags = album.tags.clone().into();
 
     assert!(unsafe {
         ffi_expect_album_tags(
             &db as *const _ as *mut std::ffi::c_void,
             &db.insert_metadata(&album)? as *const Key,
-            c_string_from_option(album.tags.artist),
-            c_string_from_option(album.tags.title),
-            album.tags.year.is_some(),
-            album.tags.year.unwrap_or(0u16),
+            &expected as *const ffi::CAlbumTags,
         )
     });
+
+    unsafe { free_album_tags(&mut expected as *mut ffi::CAlbumTags) };
 
     Ok(())
 }
@@ -58,13 +59,28 @@ fn ffi_album_tags_round_trip() -> Result {
 #[test]
 fn ffi_album_tags_rejects_invalid_args() {
     assert!(!unsafe {
-        ffi_expect_album_tags(
-            std::ptr::null_mut(),
-            std::ptr::null(),
-            std::ptr::null(),
-            std::ptr::null(),
-            false,
-            0,
+        ffi_expect_album_tags(std::ptr::null_mut(), std::ptr::null(), std::ptr::null())
+    });
+}
+
+#[test]
+fn ffi_album_round_trip() -> Result {
+    let temp_dir = tempfile::tempdir()?;
+    let db = sled::open(temp_dir.path())?;
+
+    let album = Album::arbitrary();
+    let album_key = db.insert_metadata(&album)?;
+    let mut expected: ffi::CAlbum = album.into();
+
+    assert!(unsafe {
+        ffi_expect_album(
+            &db as *const _ as *mut std::ffi::c_void,
+            &album_key as *const Key,
+            &expected as *const ffi::CAlbum,
         )
     });
+
+    unsafe { free_album(&mut expected as *mut ffi::CAlbum) };
+
+    Ok(())
 }

@@ -34,7 +34,7 @@ pub struct CAlbum {
     pub song_count: usize,
 }
 
-pub fn c_string_from_option<T: Into<Vec<u8>>>(value: Option<T>) -> *mut c_char {
+fn c_string_from_option<T: Into<Vec<u8>>>(value: Option<T>) -> *mut c_char {
     value
         .and_then(|val| CString::new(val).ok())
         .map(CString::into_raw)
