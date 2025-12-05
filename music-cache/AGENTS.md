@@ -8,6 +8,7 @@
 - `target/` and `tmp_cache/`: build artifacts and scratch data; do not commit.
 
 ## Build, Test, and Development Commands
+- When making any code changes always verify all of the following commands are green.
 - `cargo build` — compile the library and proc-macro crates.
 - `cargo test --features integration-tests` — run unit and integration tests; build.rs compiles `tests/ffi_shim.c` automatically.
 - `cargo fmt` — format Rust sources.
@@ -22,6 +23,8 @@
 
 ## Testing Guidelines
 - Framework: standard Rust tests plus C shim-driven FFI checks in `tests/ffi_c_test.rs`.
+- Arbitrary generators live in `src/tests/common.rs`, these should be used where possible.
+- All code changes should either be covered by an existing test or have a new test.
 - Add unit tests near the code (`src/.../tests`), and integration tests under `tests/`.
 - Prefer deterministic fixtures; when using temp data, rely on `tempfile` helpers.
 - Aim to keep coverage of new code meaningful; exercise FFI boundaries when changing `ffi.rs`.
