@@ -8,10 +8,11 @@
 - `target/` and `tmp_cache/`: build artifacts and scratch data; do not commit.
 
 ## Build, Test, and Development Commands
-- When making any code changes always verify all of the following commands are green.
+- When making any code changes always verify all of the following commands are green and formatters/linters are run.
 - `cargo build` — compile the library and proc-macro crates.
 - `cargo test --features integration-tests` — run unit and integration tests; build.rs compiles `tests/ffi_shim.c` automatically.
 - `cargo fmt` — format Rust sources.
+- `find tests -name '*.c' -print0 | xargs -0 clang-format -i` — format all C sources (LLVM preset in .clang-format).
 - `cargo clippy --all-targets --all-features` — lint with warnings treated seriously; fix or justify any new warnings.
 
 ## Coding Style & Naming Conventions
