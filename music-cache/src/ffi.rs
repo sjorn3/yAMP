@@ -44,20 +44,28 @@ pub fn c_string_from_option<T: Into<Vec<u8>>>(value: Option<T>) -> *mut c_char {
 #[no_mangle]
 /// # Safety
 /// `path` is a UTF-8 string. Free with `close_db`.
-pub unsafe extern "C" fn open_db(path: *const c_char) -> *mut sled::Db {
+pub unsafe extern "C" fn open_db(path: *const c_char, out: *mut *mut sled::Db) -> bool {
+    if out.is_null() {
+        return false;
+    }
+
+    *out = ptr::null_mut();
+
     if path.is_null() {
-        return ptr::null_mut();
+        return false;
     }
 
     let path = match CStr::from_ptr(path).to_str() {
         Ok(path) => path,
-        Err(_) => return ptr::null_mut(),
+        Err(_) => return false,
     };
 
-    match sled::open(path) {
+    *out = match sled::open(path) {
         Ok(db) => Box::into_raw(Box::new(db)),
         Err(_) => ptr::null_mut(),
-    }
+    };
+
+    !(*out).is_null()
 }
 
 #[no_mangle]

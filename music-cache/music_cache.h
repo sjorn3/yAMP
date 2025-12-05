@@ -49,7 +49,7 @@ typedef struct Album {
     size_t song_count;
 } Album;
 
-db *open_db(const char *path);
+bool open_db(const char *path, db **out);
 
 void close_db(db *db);
 

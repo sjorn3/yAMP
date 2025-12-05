@@ -3,6 +3,21 @@
 #include <stdint.h>
 #include <string.h>
 
+bool ffi_open_db_round_trip(const char *path) {
+  db *handle = NULL;
+  if (!open_db(path, &handle) || handle == NULL) {
+    return false;
+  }
+
+  close_db(handle);
+  return true;
+}
+
+bool ffi_open_db_rejects_null_path(void) {
+  db *handle = NULL;
+  return !open_db(NULL, &handle) && handle == NULL;
+}
+
 bool ffi_expect_album_tags(db *db, const Key *album_key, const char *artist,
                            const char *title, bool expect_year, uint16_t year) {
   AlbumTags tags = {0};
