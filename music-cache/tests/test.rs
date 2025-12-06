@@ -137,6 +137,69 @@ fn test_db_scan_albums() -> Result {
 }
 
 #[test]
+fn test_scan_album_tags_sorted() -> Result {
+    let dir = TempDir::new()?;
+    let tree = sled::open(dir.path())?;
+
+    let albums = vec![
+        AlbumTags {
+            artist: Some("Beta Artist".into()),
+            title: Some("beta".into()),
+            year: Some(1985),
+        },
+        AlbumTags {
+            artist: Some("alpha artist".into()),
+            title: Some("alpha-new".into()),
+            year: Some(2000),
+        },
+        AlbumTags {
+            artist: Some("Alpha Artist".into()),
+            title: Some("alpha-old".into()),
+            year: Some(1990),
+        },
+        AlbumTags {
+            artist: Some("123Numbers".into()),
+            title: Some("numbers".into()),
+            year: Some(1975),
+        },
+        AlbumTags {
+            artist: None,
+            title: Some("no-artist".into()),
+            year: Some(1999),
+        },
+        AlbumTags {
+            artist: Some("Alpha Artist".into()),
+            title: Some("alpha-no-year".into()),
+            year: None,
+        },
+    ];
+
+    for tags in &albums {
+        tree.insert_metadata(tags)?;
+    }
+
+    let sorted: Vec<(Option<String>, Option<u16>)> = tree
+        .scan_album_tags_sorted()?
+        .into_iter()
+        .map(|(_, tags)| (tags.artist, tags.year))
+        .collect();
+
+    assert_eq!(
+        sorted,
+        vec![
+            (None, Some(1999)),
+            (Some("123Numbers".into()), Some(1975)),
+            (Some("Alpha Artist".into()), None),
+            (Some("Alpha Artist".into()), Some(1990)),
+            (Some("Beta Artist".into()), Some(1985)),
+            (Some("alpha artist".into()), Some(2000)),
+        ]
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_scan_time() -> Result {
     let dir = TempDir::new()?;
     let tree = sled::open(dir.path())?;

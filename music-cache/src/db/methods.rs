@@ -7,11 +7,6 @@ use std::{
 
 use crate::*;
 
-// If I wanted to get rid of rkyv entirely - I could probably insert all the strings in a given struct into the sled db and then just store the keys into packed structs.
-// This might need some kind of benching though because it's not obvious which would be faster. I.e. one requires a bunch of lookups and the other requires copy to archive type and the alignment copy.
-// I get the feeling that the rkyv approach is probably faster, but using less memory would also be nice.
-// Can also get some small savings probably e.g. artists are likely repeated across many albums.
-
 pub trait Methods<T> {
     fn insert_metadata(&self, item: &T) -> Result<Key>;
 
@@ -154,6 +149,7 @@ pub fn scan_stored_albums(tree: &sled::Db) -> Result<AlbumKeyBySongKey> {
 pub trait Helpers {
     fn scan_albums(&self) -> impl Iterator<Item = Result<Album>>;
     fn scan_songs(&self) -> impl Iterator<Item = Result<Song>>;
+    fn scan_album_tags_sorted(&self) -> Result<Vec<(Key, AlbumTags)>>;
     fn get_song_from_path(&self, relpath: &[u8]) -> Result<Lazy<'_, Song>>;
     fn set_last_scan_time(&self) -> Result<()>;
     fn get_last_scan_time(&self) -> Result<SystemTime>;
@@ -175,6 +171,30 @@ impl Helpers for sled::Db {
                 .map_err(|e| e.into())
                 .and_then(|(_, bytes)| Song::deserialize(bytes))
         })
+    }
+
+    fn scan_album_tags_sorted(&self) -> Result<Vec<(Key, AlbumTags)>> {
+        let mut albums: Vec<(Key, AlbumTags)> = self
+            .scan_prefix(KeyType::Album)
+            .map(|entry| {
+                entry.map_err(|e| e.into()).and_then(|(album_key, bytes)| {
+                    let album_key: &Key = (&album_key).into();
+                    let tags = StoredAlbum::partial_deserialize_album(bytes.as_ref())?.tags;
+                    Ok((Key::from_byte_key_owned(*album_key.to_byte_key()), tags))
+                })
+            })
+            .collect::<Result<_>>()?;
+
+        albums.sort_by(|(key_a, tags_a), (key_b, tags_b)| {
+            tags_a
+                .artist
+                .as_ref()
+                .cmp(&tags_b.artist.as_ref())
+                .then_with(|| tags_a.year.cmp(&tags_b.year))
+                .then_with(|| key_a.to_byte_key().cmp(key_b.to_byte_key()))
+        });
+
+        Ok(albums)
     }
 
     // get all album_key, song_key pairs in a hash set
