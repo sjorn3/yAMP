@@ -103,3 +103,22 @@ bool ffi_expect_album(db *db, const Key *album_key, const Album *expected) {
 
   return result;
 }
+
+bool ffi_expect_scan_album_tags_sorted(db *db, size_t expected_len) {
+  if (db == NULL) {
+    return false;
+  }
+
+  AlbumTagsWithKey *albums = NULL;
+  size_t len = 0;
+
+  bool result = scan_album_tags_sorted(db, &albums, &len);
+  result &= len == expected_len;
+  result &= (len == 0) == (albums == NULL);
+
+  if (albums != NULL) {
+    free_album_tags_sorted(albums, len);
+  }
+
+  return result;
+}

@@ -4,7 +4,7 @@ use std::{
     ptr,
 };
 
-use crate::{Album, AlbumTags, Key, Methods, Result, Song, SongTags};
+use crate::{Album, AlbumTags, Helpers, Key, Methods, Result, Song, SongTags};
 
 #[repr(C)]
 pub struct CAlbumTags {
@@ -32,6 +32,12 @@ pub struct CAlbum {
     pub tags: CAlbumTags,
     pub songs: *mut CSong,
     pub song_count: usize,
+}
+
+#[repr(C)]
+pub struct CAlbumTagsWithKey {
+    pub key: Key,
+    pub tags: CAlbumTags,
 }
 
 fn c_string_from_option<T: Into<Vec<u8>>>(value: Option<T>) -> *mut c_char {
@@ -189,6 +195,46 @@ pub unsafe extern "C" fn album_for_key(
     }
 }
 
+#[no_mangle]
+/// # Safety
+/// Allocates `out` with album tags sorted by artist and year; free with `free_album_tags_sorted`.
+pub unsafe extern "C" fn scan_album_tags_sorted(
+    db: *mut sled::Db,
+    out: *mut *mut CAlbumTagsWithKey,
+    out_len: *mut usize,
+) -> bool {
+    if db.is_null() || out.is_null() || out_len.is_null() {
+        return false;
+    }
+
+    *out = ptr::null_mut();
+    *out_len = 0;
+
+    let albums = match (&*db).scan_album_tags_sorted() {
+        Ok(albums) => albums,
+        Err(_) => return false,
+    };
+
+    let mut albums: Box<[CAlbumTagsWithKey]> = albums
+        .into_iter()
+        .map(|(key, tags)| CAlbumTagsWithKey {
+            key,
+            tags: tags.into(),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+
+    *out_len = albums.len();
+    if *out_len == 0 {
+        return true;
+    }
+
+    *out = albums.as_mut_ptr();
+    std::mem::forget(albums);
+
+    true
+}
+
 fn free_c_string(ptr: &mut *mut c_char) {
     if !ptr.is_null() {
         unsafe {
@@ -251,4 +297,19 @@ pub unsafe extern "C" fn free_album(album: *mut CAlbum) {
     }
     album.songs = ptr::null_mut();
     album.song_count = 0;
+}
+
+#[no_mangle]
+/// # Safety
+/// Free arrays produced by `scan_album_tags_sorted`.
+pub unsafe extern "C" fn free_album_tags_sorted(albums: *mut CAlbumTagsWithKey, len: usize) {
+    if albums.is_null() || len == 0 {
+        return;
+    }
+
+    let albums_ptr = std::ptr::slice_from_raw_parts_mut(albums, len);
+    let mut albums_box = Box::from_raw(albums_ptr);
+    for album in albums_box.iter_mut() {
+        free_album_tags_inner(&mut album.tags);
+    }
 }

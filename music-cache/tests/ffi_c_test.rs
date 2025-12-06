@@ -18,6 +18,7 @@ extern "C" {
         album_key: *const Key,
         expected: *const ffi::CAlbumTags,
     ) -> bool;
+    fn ffi_expect_scan_album_tags_sorted(db: *mut std::ffi::c_void, expected_len: usize) -> bool;
 }
 
 #[test]
@@ -61,6 +62,24 @@ fn ffi_album_tags_rejects_invalid_args() {
     assert!(!unsafe {
         ffi_expect_album_tags(std::ptr::null_mut(), std::ptr::null(), std::ptr::null())
     });
+}
+
+#[test]
+fn ffi_scan_album_tags_sorted_round_trip() -> Result {
+    let temp_dir = tempfile::tempdir()?;
+    let db = sled::open(temp_dir.path())?;
+
+    for _ in 0..10 {
+        db.insert_metadata(&Album::arbitrary())?;
+    }
+
+    let expected_len = db.scan_album_tags_sorted()?.len();
+
+    assert!(unsafe {
+        ffi_expect_scan_album_tags_sorted(&db as *const _ as *mut std::ffi::c_void, expected_len)
+    });
+
+    Ok(())
 }
 
 #[test]

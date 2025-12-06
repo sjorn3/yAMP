@@ -49,6 +49,11 @@ typedef struct Album {
     size_t song_count;
 } Album;
 
+typedef struct AlbumTagsWithKey {
+    Key key;
+    AlbumTags tags;
+} AlbumTagsWithKey;
+
 bool open_db(const char *path, db **out);
 
 void close_db(db *db);
@@ -57,9 +62,13 @@ bool album_tags_for_key(db *db, const Key *album_key, AlbumTags *out);
 
 bool album_for_key(db *db, const Key *album_key, Album *out);
 
+bool scan_album_tags_sorted(db *db, AlbumTagsWithKey **out, size_t *out_len);
+
 void free_album_tags(AlbumTags *tags);
 
 void free_album(Album *album);
+
+void free_album_tags_sorted(AlbumTagsWithKey *albums, size_t len);
 
 #ifdef __cplusplus
 }
