@@ -197,7 +197,7 @@ pub unsafe extern "C" fn album_for_key(
 
 #[no_mangle]
 /// # Safety
-/// Allocates `out` with album tags sorted by artist and year; free with `free_album_tags_sorted`.
+/// Free with `free_album_tags_sorted`.
 pub unsafe extern "C" fn scan_album_tags_sorted(
     db: *mut sled::Db,
     out: *mut *mut CAlbumTagsWithKey,
